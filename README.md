@@ -12,6 +12,7 @@ Recreate the environment on a new machine:
 ```bash
 conda env create -f environment.yml
 conda activate parking-rl
+python -m ipykernel install --user --name parking-rl --display-name "python3 (parking-rl)"
 ```
 
 If the environment already exists:
@@ -22,6 +23,8 @@ conda activate parking-rl
 ```
 
 Ensure Qt GUI support is available (the environment installs `pyqt>=5.15`). On headless Linux hosts you may need to export `QT_QPA_PLATFORM=offscreen` or use X11 forwarding.
+
+Launch Jupyter against this environment: when opening `ParkingEnv_Demo.ipynb`, pick the kernel shown as `python3 (parking-rl)` so the notebook runs inside the freshly created environment.
 
 ## Project Layout
 
