@@ -1,0 +1,14 @@
+name: parking-rl
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - numpy=1.23.5
+  - matplotlib=3.7.1
+  - ipykernel
+  - ipython
+  - pyqt>=5.15
+  - pip
+  - pip:
+      - gymnasium==0.29.1

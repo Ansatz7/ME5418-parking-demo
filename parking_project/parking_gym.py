@@ -1,0 +1,948 @@
+"""Gymnasium environment that simulates a parking scenario.
+
+Angles in the public configuration are expressed in degrees; the environment
+converts them to radians internally. 模拟智能泊车场景的 Gymnasium 环境，外部配置使用角度制，内部统一换算成弧度。
+"""
+
+import copy
+import math
+from typing import Dict, List, Optional, Tuple
+
+import gymnasium as gym
+from gymnasium import spaces
+import matplotlib.pyplot as plt
+import numpy as np
+
+try:
+    from IPython.display import display
+except ImportError:  # pragma: no cover - IPython not always available
+    display = None
+
+
+# All angles in DEFAULT_CONFIG (and any user overrides) are expressed in degrees.
+# 默认配置（以及外部覆盖项）中的角度均采用度数表示。
+DEFAULT_CONFIG: Dict = {
+    "dt": 0.1,
+    "max_steps": 400,
+    "field_size": 70.0,
+    "ray_max_range": 12.0,
+    "ray_angles": [
+        -135.0,
+        -90.0,
+        -60.0,
+        -30.0,
+        30.0,
+        60.0,
+        90.0,
+        135.0,
+    ],
+    "vehicle": {
+        "length": 4.0,
+        "width": 2.0,
+        "wheel_base": 2.5,
+        "max_speed": 3.0,
+        "max_reverse_speed": -2.0,
+        "max_steering_angle": 45.0,
+        "max_steering_rate": 60.0,
+        "steering_damping": 0.6,
+    "steering_rate_damping": 0.25,  # viscous term for steering-rate damping (rad/s^2 per rad/s)
+    "steering_assist_deadband": 0.05,  # rad/s^2 tolerance before assist engages
+        "enable_steering_assist": True,
+    "manual_forward_accel": 1.5,
+    "manual_reverse_accel": 2.0,
+    "manual_steering_accel": 1.0,
+    },
+    "spawn_region": [-6.0, 6.0, -6.0, 6.0],
+    "parking_slot": {
+        "length": 5.5,
+        "width": 2.5,
+        "offset_x_range": (-7.0, -3.0),
+        "offset_y_range": (-4.0, 4.0),
+        "orientation_range": (-30.0, 30.0),
+    },
+    "static_obstacles": {
+        "count": 3,
+        "size_range": (1.0, 2.5),
+        "min_distance": 2.0,
+        "seed": None,
+    },
+    "dynamic_obstacles": {
+        "count": 1,
+        "radius": 1.0,
+        "speed_range": (0.5, 1.0),
+        "behavior": "random_walk",
+        "min_distance": 4.0,
+        "heading_noise": 15.0,
+    },
+    "reward": {
+        "distance_scale": 1.5,
+        "heading_scale": 0.5,
+        "collision": -120.0,
+        "success": 140.0,
+        "smoothness": 0.05,
+        "step_cost": 0.2,
+        "velocity_penalty": 0.3,
+    },
+    "success_thresholds": {
+        "position": 0.4,
+        "orientation": 6.0,
+        "speed": 0.3,
+        "steering": 5.0,
+    },
+    "rng_seed": None,
+}
+
+
+class ParkingEnv(gym.Env):
+    metadata = {"render_modes": ["human"]}
+
+    def __init__(self, config: Optional[Dict] = None, render_mode: str = "human") -> None:
+        super().__init__()
+        self.config = self._merge_config(config)
+        self.rng = np.random.default_rng(self.config["rng_seed"])
+        self.render_mode = render_mode
+        self.vehicle_cfg = self.config["vehicle"]
+        self.reward_cfg = self.config["reward"]
+        self.success_cfg = self.config["success_thresholds"]
+
+        self.dt = self.config["dt"]
+        self.field_size = self.config["field_size"]
+        self.half_field = self.field_size / 2.0
+
+        self.num_rays = len(self.config["ray_angles"])
+        assert self.num_rays == 8, "State definition expects eight ray distances."
+
+        self.observation_space = spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(19,),
+            dtype=np.float32,
+        )
+        self.action_space = spaces.Box(
+            low=np.array([-3.0, -1.5], dtype=np.float32),
+            high=np.array([2.0, 1.5], dtype=np.float32),
+            dtype=np.float32,
+        )
+
+        self.vehicle_state: Dict[str, float] = {}
+        self.target_slot: Dict[str, float] = {}
+        self.static_obstacles: List[Dict] = []
+        self.dynamic_obstacles: List[Dict] = []
+
+        self.current_step = 0
+
+        self.fig = None
+        self.ax = None
+        self._artists = {}
+
+    def _merge_config(self, override: Optional[Dict]) -> Dict:
+        """Merge user overrides into the default config and convert angles.
+
+        合并用户覆盖项并把所有角度字段转换为弧度供内部使用。
+        """
+        base_cfg = copy.deepcopy(DEFAULT_CONFIG)
+        if override is None:
+            return self._convert_angles_to_radians(base_cfg)
+
+        user_cfg = copy.deepcopy(override)
+        for key, value in user_cfg.items():
+            if key not in base_cfg or not isinstance(value, dict):
+                base_cfg[key] = value
+            else:
+                base_cfg[key].update(value)
+        return self._convert_angles_to_radians(base_cfg)
+
+    def _convert_angles_to_radians(self, config: Dict) -> Dict:
+        # Convert degree-based configuration values to radians for internal use.
+        # 将度数配置转换为弧度，供物理和几何计算使用。
+        config["ray_angles"] = [math.radians(float(v)) for v in config["ray_angles"]]
+
+        vehicle_cfg = config.get("vehicle", {})
+        if "max_steering_angle" in vehicle_cfg:
+            vehicle_cfg["max_steering_angle"] = math.radians(float(vehicle_cfg["max_steering_angle"]))
+        if "max_steering_rate" in vehicle_cfg:
+            vehicle_cfg["max_steering_rate"] = math.radians(float(vehicle_cfg["max_steering_rate"]))
+        if "steering_assist_deadband" in vehicle_cfg:
+            vehicle_cfg["steering_assist_deadband"] = math.radians(float(vehicle_cfg["steering_assist_deadband"]))
+        if "manual_steering_accel" in vehicle_cfg:
+            vehicle_cfg["manual_steering_accel"] = math.radians(float(vehicle_cfg["manual_steering_accel"]))
+
+        slot_cfg = config.get("parking_slot", {})
+        if "orientation_range" in slot_cfg:
+            slot_cfg["orientation_range"] = tuple(
+                math.radians(float(v)) for v in slot_cfg["orientation_range"]
+            )
+
+        dyn_cfg = config.get("dynamic_obstacles", {})
+        if "heading_noise" in dyn_cfg:
+            dyn_cfg["heading_noise"] = math.radians(float(dyn_cfg["heading_noise"]))
+
+        success_cfg = config.get("success_thresholds", {})
+        if "orientation" in success_cfg:
+            success_cfg["orientation"] = math.radians(float(success_cfg["orientation"]))
+        if "steering" in success_cfg:
+            success_cfg["steering"] = math.radians(float(success_cfg["steering"]))
+
+        return config
+
+    def reset(
+        self,
+        *,
+        seed: Optional[int] = None,
+        options: Optional[Dict] = None,
+    ) -> Tuple[np.ndarray, Dict]:
+        super().reset(seed=seed)
+        if seed is not None:
+            self.rng = np.random.default_rng(seed)
+        if options is None:
+            options = {}
+        self.current_step = 0
+
+        self._spawn_vehicle()
+        self._generate_parking_slot()
+        self._generate_static_obstacles()
+        self._generate_dynamic_obstacles()
+
+        observation = self._get_observation()
+        info = self._initial_info()
+        return observation, info
+
+    def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict]:
+        self.current_step += 1
+        action = np.clip(action, self.action_space.low, self.action_space.high)
+
+        self._update_vehicle(action)
+        self._update_dynamic_obstacles()
+
+        observation = self._get_observation()
+        reward, info = self._compute_reward()
+        terminated, truncated, term_reason = self._check_termination(info)
+        info["terminal_reason"] = term_reason
+
+        if terminated or truncated:
+            info["final_observation"] = observation
+
+        return observation, reward, terminated, truncated, info
+
+    def render(self) -> None:
+        if self.render_mode != "human":
+            raise NotImplementedError("Only human render mode is implemented.")
+
+        if self.fig is None:
+            plt.ion()
+            plt.rcParams.setdefault("keymap.save", [])
+            plt.rcParams["keymap.save"] = []  # avoid save dialog on 's' key during manual control
+            self.fig, self.ax = plt.subplots(figsize=(6, 6))
+            self.ax.set_xlim(-self.half_field, self.half_field)
+            self.ax.set_ylim(-self.half_field, self.half_field)
+            self.ax.set_aspect("equal")
+            self.ax.grid(True, linestyle="--", alpha=0.3)
+            self._artists = {}
+            backend = plt.get_backend().lower()
+            if display is not None and backend.startswith("module://ipympl"):
+                display(self.fig)
+            else:
+                plt.show(block=False)
+
+        self.ax.cla()
+        self.ax.set_xlim(-self.half_field, self.half_field)
+        self.ax.set_ylim(-self.half_field, self.half_field)
+        self.ax.set_aspect("equal")
+        self.ax.grid(True, linestyle="--", alpha=0.3)
+
+        boundary = plt.Rectangle(
+            (-self.half_field, -self.half_field),
+            self.field_size,
+            self.field_size,
+            fill=False,
+            lw=2.0,
+            color="black",
+        )
+        self.ax.add_patch(boundary)
+
+        if self.target_slot:
+            self._draw_parking_slot()
+        if self.static_obstacles:
+            self._draw_static_obstacles()
+        if self.dynamic_obstacles:
+            self._draw_dynamic_obstacles()
+        if self.vehicle_state:
+            self._draw_vehicle()
+            self._draw_rays()
+
+        if self.vehicle_state:
+            obs = self._get_observation(raw=True)
+            sensor_values = obs[-self.num_rays :]
+            text_lines = [
+                f"Step: {self.current_step}",
+                f"Velocity: {self.vehicle_state['velocity']:.2f} m/s",
+                f"Steering angle: {math.degrees(self.vehicle_state['steering_angle']):.1f} deg",
+            ]
+            text_lines.extend(
+                [
+                    f"Ray {idx}: {dist:.2f}"
+                    for idx, dist in enumerate(sensor_values, start=1)
+                ]
+            )
+            self.ax.text(
+                1.02,
+                0.99,
+                "\n".join(text_lines),
+                transform=self.ax.transAxes,
+                fontsize=8,
+                va="top",
+            )
+
+        plt.pause(0.001)
+
+    def close(self) -> None:
+        if self.fig is not None:
+            plt.close(self.fig)
+            self.fig = None
+            self.ax = None
+
+    # Vehicle and environment setup helpers ---------------------------------
+    def _spawn_vehicle(self) -> None:
+        xmin, xmax, ymin, ymax = self.config["spawn_region"]
+        x = self.rng.uniform(xmin, xmax)
+        y = self.rng.uniform(ymin, ymax)
+        yaw = self.rng.uniform(-math.pi, math.pi)
+        velocity = 0.0
+        steering_angle = 0.0
+        steering_rate = 0.0
+
+        self.vehicle_state = {
+            "x": float(x),
+            "y": float(y),
+            "yaw": float(yaw),
+            "velocity": float(velocity),
+            "steering_angle": float(steering_angle),
+            "steering_rate": float(steering_rate),
+        }
+
+    def _generate_parking_slot(self) -> None:
+        slot_cfg = self.config["parking_slot"]
+        offset_x = self.rng.uniform(*slot_cfg["offset_x_range"])
+        offset_y = self.rng.uniform(*slot_cfg["offset_y_range"])
+        yaw = self.rng.uniform(*slot_cfg["orientation_range"])
+
+        center = np.array([offset_x, offset_y], dtype=float)
+        base_slot_cfg = DEFAULT_CONFIG["parking_slot"]
+        length = float(slot_cfg.get("length", base_slot_cfg["length"]))
+        width = float(slot_cfg.get("width", base_slot_cfg["width"]))
+
+        self.target_slot = {
+            "center": center,
+            "yaw": float(yaw),
+            "length": length,
+            "width": width,
+        }
+
+    def _generate_static_obstacles(self) -> None:
+        cfg = self.config["static_obstacles"]
+        self.static_obstacles = []
+        count = cfg["count"]
+        size_min, size_max = cfg["size_range"]
+        min_dist = cfg["min_distance"]
+
+        if cfg.get("seed") is not None:
+            local_rng = np.random.default_rng(cfg["seed"])
+        else:
+            local_rng = self.rng
+
+        attempts = 0
+        while len(self.static_obstacles) < count and attempts < 200:
+            attempts += 1
+            width = float(local_rng.uniform(size_min, size_max))
+            height = float(local_rng.uniform(size_min, size_max))
+            x = float(local_rng.uniform(-self.half_field + width, self.half_field - width))
+            y = float(local_rng.uniform(-self.half_field + height, self.half_field - height))
+
+            center = np.array([x, y], dtype=float)
+            if self._is_far_from_vehicle(center, min_dist) and self._is_far_from_slot(
+                center, min_dist
+            ):
+                self.static_obstacles.append(
+                    {
+                        "center": center,
+                        "size": (width, height),
+                    }
+                )
+
+    def _generate_dynamic_obstacles(self) -> None:
+        cfg = self.config["dynamic_obstacles"]
+        self.dynamic_obstacles = []
+        count = cfg["count"]
+        radius = cfg["radius"]
+        min_dist = cfg["min_distance"]
+
+        for _ in range(count):
+            for _ in range(100):
+                x = float(self.rng.uniform(-self.half_field + radius, self.half_field - radius))
+                y = float(self.rng.uniform(-self.half_field + radius, self.half_field - radius))
+                center = np.array([x, y], dtype=float)
+                if (
+                    self._is_far_from_vehicle(center, min_dist)
+                    and self._is_far_from_slot(center, min_dist)
+                ):
+                    break
+            else:
+                center = np.array([0.0, 0.0], dtype=float)
+
+            heading = float(self.rng.uniform(-math.pi, math.pi))
+            speed = float(self.rng.uniform(*cfg["speed_range"]))
+            obstacle = {
+                "pos": center,
+                "heading": heading,
+                "speed": speed,
+                "radius": float(radius),
+                "behavior": cfg["behavior"],
+                "target": self._sample_random_point(),
+            }
+            self.dynamic_obstacles.append(obstacle)
+
+    # Update functions -------------------------------------------------------
+    def _update_vehicle(self, action: np.ndarray) -> None:
+        """Integrate vehicle dynamics for one time-step.
+
+        对车辆进行一步积分：接收 [纵向加速度, 转向角加速度]，更新速度、姿态等状态量。
+        """
+        accel = float(action[0])
+        steering_accel = float(action[1])
+
+        vel = self.vehicle_state["velocity"]
+        vel += accel * self.dt
+        vel = np.clip(
+            vel,
+            self.vehicle_cfg["max_reverse_speed"],
+            self.vehicle_cfg["max_speed"],
+        )
+
+        steering_rate = self.vehicle_state["steering_rate"]
+        steering_rate += steering_accel * self.dt
+
+        assist_deadband = self.vehicle_cfg.get("steering_assist_deadband", 0.0)
+        if (
+            self.vehicle_cfg.get("enable_steering_assist", False)
+            and abs(steering_accel) <= assist_deadband
+        ):
+            assist_accel = self.vehicle_cfg["steering_damping"] * self.vehicle_state["steering_angle"]
+            assist_accel += self.vehicle_cfg.get("steering_rate_damping", 0.0) * steering_rate
+            steering_rate -= assist_accel * self.dt
+
+        steering_rate = np.clip(
+            steering_rate,
+            -self.vehicle_cfg["max_steering_rate"],
+            self.vehicle_cfg["max_steering_rate"],
+        )
+
+        steering_angle = self.vehicle_state["steering_angle"] + steering_rate * self.dt
+        steering_angle = np.clip(
+            steering_angle,
+            -self.vehicle_cfg["max_steering_angle"],
+            self.vehicle_cfg["max_steering_angle"],
+        )
+
+        yaw = self.vehicle_state["yaw"]
+        wheel_base = self.vehicle_cfg["wheel_base"]
+        beta = math.atan(math.tan(steering_angle) / 2.0)
+
+        x = self.vehicle_state["x"]
+        y = self.vehicle_state["y"]
+
+        x += vel * math.cos(yaw + beta) * self.dt
+        y += vel * math.sin(yaw + beta) * self.dt
+        yaw += vel * math.tan(steering_angle) / wheel_base * self.dt
+        yaw = self._wrap_angle(yaw)
+
+        self.vehicle_state.update(
+            {
+                "velocity": vel,
+                "steering_rate": steering_rate,
+                "steering_angle": steering_angle,
+                "yaw": yaw,
+                "x": x,
+                "y": y,
+            }
+        )
+
+        self.vehicle_state["velocity"] += self.rng.normal(0.0, 0.02)
+        self.vehicle_state["steering_angle"] += self.rng.normal(0.0, math.radians(0.2))
+
+    def _update_dynamic_obstacles(self) -> None:
+        if not self.dynamic_obstacles:
+            return
+
+        cfg = self.config["dynamic_obstacles"]
+        behavior = cfg["behavior"]
+        heading_noise = cfg.get("heading_noise", math.radians(10.0))
+
+        for obstacle in self.dynamic_obstacles:
+            if behavior == "random_walk":
+                obstacle["heading"] += self.rng.normal(0.0, heading_noise)
+            elif behavior == "goal_driven":
+                target = obstacle["target"]
+                direction = target - obstacle["pos"]
+                if np.linalg.norm(direction) < 0.5:
+                    obstacle["target"] = self._sample_random_point()
+                else:
+                    obstacle["heading"] = math.atan2(direction[1], direction[0])
+
+            obstacle["heading"] = self._wrap_angle(obstacle["heading"])
+            displacement = np.array(
+                [
+                    math.cos(obstacle["heading"]),
+                    math.sin(obstacle["heading"]),
+                ],
+                dtype=float,
+            )
+            obstacle["pos"] += displacement * obstacle["speed"] * self.dt
+
+            for i in range(2):
+                if obstacle["pos"][i] > self.half_field - obstacle["radius"]:
+                    obstacle["pos"][i] = self.half_field - obstacle["radius"]
+                    obstacle["heading"] = self._wrap_angle(obstacle["heading"] + math.pi)
+                if obstacle["pos"][i] < -self.half_field + obstacle["radius"]:
+                    obstacle["pos"][i] = -self.half_field + obstacle["radius"]
+                    obstacle["heading"] = self._wrap_angle(obstacle["heading"] + math.pi)
+
+    # Observation & reward ---------------------------------------------------
+    def _get_observation(self, raw: bool = False) -> np.ndarray:
+        x = self.vehicle_state["x"]
+        y = self.vehicle_state["y"]
+        yaw = self.vehicle_state["yaw"]
+        velocity = self.vehicle_state["velocity"]
+        steering_angle = self.vehicle_state["steering_angle"]
+        steering_rate = self.vehicle_state["steering_rate"]
+
+        rel_slot = self._vehicle_to_slot_frame()
+        ray_distances = self._cast_rays()
+
+        obs = np.array(
+            [
+                x / self.half_field,
+                y / self.half_field,
+                math.cos(yaw),
+                math.sin(yaw),
+                velocity,
+                steering_angle,
+                steering_rate,
+                rel_slot[0] / self.field_size,
+                rel_slot[1] / self.field_size,
+                math.cos(rel_slot[2]),
+                math.sin(rel_slot[2]),
+                *ray_distances,
+            ],
+            dtype=np.float32,
+        )
+
+        if not raw:
+            obs += self.rng.normal(0.0, 0.005, size=obs.shape)
+
+        return obs
+
+    def _compute_reward(self) -> Tuple[float, Dict]:
+        rel_slot = self._vehicle_to_slot_frame()
+        distance = np.linalg.norm(rel_slot[:2])
+        heading_error = abs(rel_slot[2])
+        velocity = abs(self.vehicle_state["velocity"])
+        steering_rate = abs(self.vehicle_state["steering_rate"])
+        collision = self._check_collision()
+        success = self._check_success(rel_slot, velocity)
+
+        reward = 0.0
+        reward -= self.reward_cfg["distance_scale"] * distance
+        reward -= self.reward_cfg["heading_scale"] * heading_error
+        reward -= self.reward_cfg["velocity_penalty"] * velocity
+        reward -= self.reward_cfg["smoothness"] * (steering_rate ** 2)
+        reward -= self.reward_cfg["step_cost"]
+
+        if collision:
+            reward += self.reward_cfg["collision"]
+        if success:
+            reward += self.reward_cfg["success"]
+
+        info = {
+            "distance_to_slot": distance,
+            "heading_error": heading_error,
+            "collision": collision,
+            "success": success,
+        }
+        return reward, info
+
+    def _check_termination(self, info: Dict) -> Tuple[bool, bool, str]:
+        if info["collision"]:
+            return True, False, "collision"
+
+        if abs(self.vehicle_state["x"]) > self.half_field or abs(self.vehicle_state["y"]) > self.half_field:
+            return True, False, "out_of_bounds"
+
+        if info["success"]:
+            return True, False, "success"
+
+        if self.current_step >= self.config["max_steps"]:
+            return False, True, "timeout"
+
+        return False, False, "running"
+
+    def _initial_info(self) -> Dict:
+        rel_slot = self._vehicle_to_slot_frame()
+        return {
+            "distance_to_slot": float(np.linalg.norm(rel_slot[:2])),
+            "heading_error": float(abs(rel_slot[2])),
+            "collision": False,
+            "success": False,
+            "terminal_reason": "reset",
+        }
+
+    def _check_collision(self) -> bool:
+        vehicle_poly = self._vehicle_polygon()
+        collision_radius = np.hypot(self.vehicle_cfg["length"], self.vehicle_cfg["width"]) / 2.0
+
+        for obstacle in self.static_obstacles:
+            rect = self._obstacle_rectangle(obstacle)
+            if self._polygon_collision(vehicle_poly, rect):
+                return True
+
+        for obstacle in self.dynamic_obstacles:
+            distance = np.linalg.norm(obstacle["pos"] - np.array([self.vehicle_state["x"], self.vehicle_state["y"]]))
+            if distance <= obstacle["radius"] + collision_radius:
+                return True
+
+        return False
+
+    def _check_success(self, rel_slot: np.ndarray, velocity: float) -> bool:
+        pos_ok = np.linalg.norm(rel_slot[:2]) < self.success_cfg["position"]
+        heading_ok = abs(rel_slot[2]) < self.success_cfg["orientation"]
+        steering_ok = abs(self.vehicle_state["steering_angle"]) < self.success_cfg["steering"]
+        speed_ok = velocity < self.success_cfg["speed"]
+        return pos_ok and heading_ok and steering_ok and speed_ok
+
+    # Geometry helpers -------------------------------------------------------
+    def _vehicle_polygon(self) -> np.ndarray:
+        length = self.vehicle_cfg["length"]
+        width = self.vehicle_cfg["width"]
+        x = self.vehicle_state["x"]
+        y = self.vehicle_state["y"]
+        yaw = self.vehicle_state["yaw"]
+        cos_yaw = math.cos(yaw)
+        sin_yaw = math.sin(yaw)
+
+        half_length = length / 2.0
+        half_width = width / 2.0
+
+        corners_local = np.array(
+            [
+                [half_length, half_width],
+                [half_length, -half_width],
+                [-half_length, -half_width],
+                [-half_length, half_width],
+            ]
+        )
+
+        rotation = np.array([[cos_yaw, -sin_yaw], [sin_yaw, cos_yaw]])
+        corners_world = corners_local @ rotation.T + np.array([x, y])
+        return corners_world
+
+    def _obstacle_rectangle(self, obstacle: Dict) -> np.ndarray:
+        center = obstacle["center"]
+        width, height = obstacle["size"]
+        half_w = width / 2.0
+        half_h = height / 2.0
+        corners = np.array(
+            [
+                [center[0] - half_w, center[1] - half_h],
+                [center[0] + half_w, center[1] - half_h],
+                [center[0] + half_w, center[1] + half_h],
+                [center[0] - half_w, center[1] + half_h],
+            ]
+        )
+        return corners
+
+    def _polygon_collision(self, poly_a: np.ndarray, poly_b: np.ndarray) -> bool:
+        if self._separating_axis_theorem(poly_a, poly_b):
+            return False
+        return True
+
+    def _separating_axis_theorem(self, poly_a: np.ndarray, poly_b: np.ndarray) -> bool:
+        def _normals(poly: np.ndarray) -> List[np.ndarray]:
+            normals = []
+            for i in range(len(poly)):
+                p1 = poly[i]
+                p2 = poly[(i + 1) % len(poly)]
+                edge = p2 - p1
+                normal = np.array([-edge[1], edge[0]])
+                normal_norm = np.linalg.norm(normal)
+                if normal_norm > 0:
+                    normals.append(normal / normal_norm)
+            return normals
+
+        def _project(poly: np.ndarray, axis: np.ndarray) -> Tuple[float, float]:
+            projections = poly @ axis
+            return projections.min(), projections.max()
+
+        for axis in _normals(poly_a) + _normals(poly_b):
+            min_a, max_a = _project(poly_a, axis)
+            min_b, max_b = _project(poly_b, axis)
+            if max_a < min_b or max_b < min_a:
+                return True
+        return False
+
+    def _cast_rays(self) -> List[float]:
+        ray_distances = []
+        origin = np.array([self.vehicle_state["x"], self.vehicle_state["y"]])
+        base_yaw = self.vehicle_state["yaw"]
+        max_range = self.config["ray_max_range"]
+
+        for angle in self.config["ray_angles"]:
+            ray_dir = np.array(
+                [math.cos(base_yaw + angle), math.sin(base_yaw + angle)],
+                dtype=float,
+            )
+            distance = self._ray_distance(origin, ray_dir, max_range)
+            ray_distances.append(distance / max_range)
+        return ray_distances
+
+    def _ray_distance(self, origin: np.ndarray, direction: np.ndarray, max_range: float) -> float:
+        min_dist = max_range
+        dist_field = self._distance_to_field(origin, direction, max_range)
+        min_dist = min(min_dist, dist_field)
+
+        for obstacle in self.static_obstacles:
+            dist = self._distance_to_rectangle(origin, direction, obstacle)
+            if dist is not None:
+                min_dist = min(min_dist, dist)
+
+        for obstacle in self.dynamic_obstacles:
+            dist = self._distance_to_circle(origin, direction, obstacle["pos"], obstacle["radius"])
+            if dist is not None:
+                min_dist = min(min_dist, dist)
+
+        return float(min_dist)
+
+    def _distance_to_field(self, origin: np.ndarray, direction: np.ndarray, max_range: float) -> float:
+        t_values = []
+        for axis in range(2):
+            if abs(direction[axis]) < 1e-6:
+                continue
+            bound = self.half_field if direction[axis] > 0 else -self.half_field
+            t = (bound - origin[axis]) / direction[axis]
+            if 0.0 < t <= max_range:
+                other = origin[(axis + 1) % 2] + t * direction[(axis + 1) % 2]
+                if -self.half_field <= other <= self.half_field:
+                    t_values.append(t)
+        if t_values:
+            return min(t_values)
+        return max_range
+
+    def _distance_to_rectangle(
+        self,
+        origin: np.ndarray,
+        direction: np.ndarray,
+        obstacle: Dict,
+    ) -> Optional[float]:
+        corners = self._obstacle_rectangle(obstacle)
+        min_t = None
+        for i in range(len(corners)):
+            a = corners[i]
+            b = corners[(i + 1) % len(corners)]
+            t = self._ray_segment_intersection(origin, direction, a, b)
+            if t is not None and (min_t is None or t < min_t):
+                min_t = t
+        return min_t
+
+    def _distance_to_circle(
+        self,
+        origin: np.ndarray,
+        direction: np.ndarray,
+        center: np.ndarray,
+        radius: float,
+    ) -> Optional[float]:
+        oc = origin - center
+        a = np.dot(direction, direction)
+        b = 2.0 * np.dot(oc, direction)
+        c = np.dot(oc, oc) - radius ** 2
+        discriminant = b ** 2 - 4 * a * c
+        if discriminant < 0:
+            return None
+        sqrt_disc = math.sqrt(discriminant)
+        t1 = (-b - sqrt_disc) / (2 * a)
+        t2 = (-b + sqrt_disc) / (2 * a)
+
+        candidates = [t for t in (t1, t2) if t > 0]
+        if not candidates:
+            return None
+        return min(candidates)
+
+    def _ray_segment_intersection(
+        self,
+        origin: np.ndarray,
+        direction: np.ndarray,
+        p1: np.ndarray,
+        p2: np.ndarray,
+    ) -> Optional[float]:
+        v1 = origin - p1
+        v2 = p2 - p1
+        denominator = direction[0] * v2[1] - direction[1] * v2[0]
+        if abs(denominator) < 1e-8:
+            return None
+        t1 = (v2[0] * v1[1] - v2[1] * v1[0]) / denominator
+        t2 = (direction[0] * v1[1] - direction[1] * v1[0]) / denominator
+        if t1 >= 0 and 0 <= t2 <= 1:
+            return t1
+        return None
+
+    def _vehicle_to_slot_frame(self) -> np.ndarray:
+        vehicle_pos = np.array([self.vehicle_state["x"], self.vehicle_state["y"]])
+        slot_center = self.target_slot["center"]
+        diff = slot_center - vehicle_pos
+        slot_yaw = self.target_slot["yaw"]
+        rotation = np.array(
+            [
+                [math.cos(slot_yaw), math.sin(slot_yaw)],
+                [-math.sin(slot_yaw), math.cos(slot_yaw)],
+            ]
+        )
+        local = rotation @ diff
+        yaw_error = self._wrap_angle(self.vehicle_state["yaw"] - slot_yaw)
+        return np.array([local[0], local[1], yaw_error])
+
+    # Drawing helpers --------------------------------------------------------
+    def _draw_vehicle(self) -> None:
+        required_keys = {"x", "y", "yaw", "steering_angle"}
+        if not required_keys.issubset(self.vehicle_state.keys()):
+            return
+        poly = self._vehicle_polygon()
+        self.ax.fill(poly[:, 0], poly[:, 1], color="#1f77b4", alpha=0.6)
+
+        front_center = np.mean(poly[:2], axis=0)
+        self.ax.plot(
+            [self.vehicle_state["x"], front_center[0]],
+            [self.vehicle_state["y"], front_center[1]],
+            color="k",
+            linewidth=1.5,
+        )
+
+        wheel_base = self.vehicle_cfg["wheel_base"]
+        rear_axle = np.array([self.vehicle_state["x"], self.vehicle_state["y"]])
+        heading = self.vehicle_state["yaw"]
+        front_axle = rear_axle + wheel_base * np.array(
+            [math.cos(heading), math.sin(heading)]
+        )
+
+        wheel_length = 0.5
+        wheel_width = 0.2
+        for axle_center, steering in ((front_axle, self.vehicle_state["steering_angle"]), (rear_axle, 0.0)):
+            for offset in (-0.6, 0.6):
+                lateral = np.array([-math.sin(heading), math.cos(heading)]) * offset
+                wheel_center = axle_center + lateral
+                self._draw_wheel(wheel_center, heading + steering, wheel_length, wheel_width)
+
+    def _draw_wheel(
+        self,
+        center: np.ndarray,
+        angle: float,
+        length: float,
+        width: float,
+    ) -> None:
+        rotation = np.array(
+            [
+                [math.cos(angle), -math.sin(angle)],
+                [math.sin(angle), math.cos(angle)],
+            ]
+        )
+        corners = np.array(
+            [
+                [length / 2, width / 2],
+                [length / 2, -width / 2],
+                [-length / 2, -width / 2],
+                [-length / 2, width / 2],
+            ]
+        )
+        world = corners @ rotation.T + center
+        self.ax.fill(world[:, 0], world[:, 1], color="black")
+
+    def _draw_parking_slot(self) -> None:
+        slot = self.target_slot
+        if not slot:
+            return
+
+        base_slot_cfg = DEFAULT_CONFIG["parking_slot"]
+        length = slot.get("length", base_slot_cfg["length"])
+        width = slot.get("width", base_slot_cfg["width"])
+        center = slot.get("center")
+        rotation = slot.get("yaw")
+
+        if center is None or rotation is None:
+            return
+        rect = plt.Rectangle(
+            (center[0] - length / 2, center[1] - width / 2),
+            length,
+            width,
+            angle=math.degrees(rotation),
+            fill=False,
+            linestyle="--",
+            edgecolor="#2ca02c",
+            linewidth=2.0,
+        )
+        self.ax.add_patch(rect)
+
+    def _draw_static_obstacles(self) -> None:
+        for obstacle in self.static_obstacles:
+            width, height = obstacle["size"]
+            center = obstacle["center"]
+            rect = plt.Rectangle(
+                (center[0] - width / 2, center[1] - height / 2),
+                width,
+                height,
+                color="#ff7f0e",
+                alpha=0.6,
+            )
+            self.ax.add_patch(rect)
+
+    def _draw_dynamic_obstacles(self) -> None:
+        for obstacle in self.dynamic_obstacles:
+            patch = plt.Circle(
+                obstacle["pos"],
+                obstacle["radius"],
+                color="#d62728",
+                alpha=0.6,
+            )
+            self.ax.add_patch(patch)
+
+    def _draw_rays(self) -> None:
+        origin = np.array([self.vehicle_state["x"], self.vehicle_state["y"]])
+        base_yaw = self.vehicle_state["yaw"]
+        max_range = self.config["ray_max_range"]
+
+        for value, angle in zip(self._cast_rays(), self.config["ray_angles"]):
+            length = value * max_range
+            direction = np.array([math.cos(base_yaw + angle), math.sin(base_yaw + angle)])
+            endpoint = origin + direction * length
+            self.ax.plot(
+                [origin[0], endpoint[0]],
+                [origin[1], endpoint[1]],
+                linestyle="--",
+                color="#17becf",
+                linewidth=1.2,
+            )
+
+    # Utility ----------------------------------------------------------------
+    def _wrap_angle(self, angle: float) -> float:
+        return (angle + math.pi) % (2 * math.pi) - math.pi
+
+    def _is_far_from_vehicle(self, point: np.ndarray, min_distance: float) -> bool:
+        vehicle_pos = np.array([self.vehicle_state["x"], self.vehicle_state["y"]])
+        return np.linalg.norm(point - vehicle_pos) > min_distance
+
+    def _is_far_from_slot(self, point: np.ndarray, min_distance: float) -> bool:
+        return np.linalg.norm(point - self.target_slot["center"]) > min_distance
+
+    def _sample_random_point(self) -> np.ndarray:
+        return np.array(
+            [
+                self.rng.uniform(-self.half_field, self.half_field),
+                self.rng.uniform(-self.half_field, self.half_field),
+            ],
+            dtype=float,
+        )

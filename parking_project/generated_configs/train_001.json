@@ -1,0 +1,84 @@
+{
+  "dt": 0.112,
+  "field_size": 25.01,
+  "ray_max_range": 15.86,
+  "ray_angles": [
+    -135.6356053761771,
+    -85.27555191177261,
+    -54.75696427632865,
+    -32.19465126547917,
+    30.22679485892321,
+    62.20928240488389,
+    90.39487881017509,
+    130.54062353961604
+  ],
+  "spawn_region": [
+    -7.49,
+    10.37,
+    -5.41,
+    10.11
+  ],
+  "vehicle": {
+    "length": 4.4,
+    "width": 1.81,
+    "wheel_base": 2.74,
+    "max_speed": 2.89,
+    "max_reverse_speed": -2.37,
+    "max_steering_angle": 43.58,
+    "max_steering_rate": 60.23,
+    "steering_damping": 0.51,
+    "enable_steering_assist": false
+  },
+  "parking_slot": {
+    "length": 5.46,
+    "width": 2.13,
+    "offset_x_range": [
+      -9.63,
+      -7.56
+    ],
+    "offset_y_range": [
+      -5.05,
+      1.23
+    ],
+    "orientation_range": [
+      -9.48,
+      9.48
+    ]
+  },
+  "static_obstacles": {
+    "count": 4,
+    "size_range": [
+      0.82,
+      1.93
+    ],
+    "min_distance": 1.8,
+    "seed": 9930
+  },
+  "dynamic_obstacles": {
+    "count": 1,
+    "radius": 1.39,
+    "speed_range": [
+      0.78,
+      1.46
+    ],
+    "behavior": "patrol",
+    "min_distance": 4.13,
+    "heading_noise": 15.95
+  },
+  "reward": {
+    "distance_scale": 1.33,
+    "heading_scale": 0.57,
+    "collision": -119.23,
+    "success": 153.79,
+    "smoothness": 0.072,
+    "step_cost": 0.23,
+    "velocity_penalty": 0.318
+  },
+  "success_thresholds": {
+    "position": 0.521,
+    "orientation": 4.91,
+    "speed": 0.43,
+    "steering": 4.34
+  },
+  "rng_seed": 484535
+}

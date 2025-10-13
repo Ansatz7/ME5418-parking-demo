@@ -1,0 +1,150 @@
+{
+  "__notes": {
+    "dt": "仿真步长（秒）/ Simulation time step (s)",
+    "max_steps": "单回合最大步数 / Maximum steps per episode",
+    "field_size": "场地边长（米）/ Field side length (m)",
+    "ray_max_range": "激光雷达射线最大距离（米）/ Ray cast max range (m)",
+    "ray_angles": "雷达射线角度（度）/ Ray angles relative to车头 (deg)"
+  },
+  "dt": 0.1,
+  "max_steps": 4000,
+  "field_size": 40.0,
+  "ray_max_range": 12.0,
+  "ray_angles": [
+    -135.0,
+    -90.0,
+    -60.0,
+    -30.0,
+    30.0,
+    60.0,
+    90.0,
+    135.0
+  ],
+  "_spawn_region_notes": "出生区域 [xmin, xmax, ymin, ymax]（米）/ Spawn region bounds [xmin, xmax, ymin, ymax] in meters",
+  "vehicle": {
+    "__notes": {
+      "length": "车长（米）/ Vehicle length (m)",
+      "width": "车宽（米）/ Vehicle width (m)",
+      "wheel_base": "轴距（米）/ Wheel base (m)",
+      "max_speed": "前进最大速度（米/秒）/ Max forward speed (m/s)",
+      "max_reverse_speed": "倒车最大速度（米/秒，负值）/ Max reverse speed (m/s, negative)",
+      "max_steering_angle": "方向盘极限角度（度）/ Max steering angle (deg)",
+      "max_steering_rate": "方向盘角速度极值（度/秒）/ Max steering rate (deg/s)",
+      "steering_damping": "回正比例系数 Kp / Steering assist Kp",
+      "steering_rate_damping": "回正速度阻尼系数 Kd / Steering assist Kd",
+      "steering_assist_deadband": "回正启动阈值（度/秒²）/ Assist deadband (deg/s²)",
+      "enable_steering_assist": "是否启用方向盘回正辅助 / Enable steering assist",
+      "manual_forward_accel": "手动模式 W 键纵向增量（米/秒²）/ Manual forward accel step",
+      "manual_reverse_accel": "手动模式 S 键纵向增量（米/秒²）/ Manual reverse accel step",
+      "manual_steering_accel": "手动模式 A/D 键转向增量（度/秒²）/ Manual steering accel step"
+    },
+    "length": 4.0,
+    "width": 2.0,
+    "wheel_base": 2.5,
+    "max_speed": 3.0,
+    "max_reverse_speed": -2.0,
+    "max_steering_angle": 60,
+    "max_steering_rate": 30.0,
+    "steering_damping": 48.1,
+    "steering_rate_damping": 8.450000000000001,
+    "steering_assist_deadband": 0.03,
+    "enable_steering_assist": true,
+    "manual_forward_accel": 1.5,
+    "manual_reverse_accel": 2.0,
+    "manual_steering_accel": 10.0
+  },
+  "spawn_region": [
+    -6.0,
+    6.0,
+    -6.0,
+    6.0
+  ],
+  "parking_slot": {
+    "__notes": {
+      "length": "车位长度（米）/ Slot length (m)",
+      "width": "车位宽度（米）/ Slot width (m)",
+      "offset_x_range": "车位中心 X 偏移范围（米）/ Slot center X range (m)",
+      "offset_y_range": "车位中心 Y 偏移范围（米）/ Slot center Y range (m)",
+      "orientation_range": "车位朝向角度范围（度）/ Slot orientation range (deg)"
+    },
+    "length": 5.5,
+    "width": 2.5,
+    "offset_x_range": [
+      -7.0,
+      -3.0
+    ],
+    "offset_y_range": [
+      -4.0,
+      4.0
+    ],
+    "orientation_range": [
+      -0.0,
+      0.0
+    ]
+  },
+  "static_obstacles": {
+    "__notes": {
+      "count": "静态障碍数量 / Number of static obstacles",
+      "size_range": "障碍物尺寸范围（米）/ Size range (m)",
+      "min_distance": "与车辆/车位最小距离（米）/ Min distance from vehicle/slot (m)",
+      "seed": "随机种子（可选）/ RNG seed (optional)"
+    },
+    "count": 3,
+    "size_range": [
+      1.0,
+      2.5
+    ],
+    "min_distance": 2.0,
+    "seed": null
+  },
+  "dynamic_obstacles": {
+    "__notes": {
+      "count": "动态障碍数量 / Number of dynamic obstacles",
+      "radius": "动态障碍半径（米）/ Obstacle radius (m)",
+      "speed_range": "速度范围（米/秒）/ Speed range (m/s)",
+      "behavior": "运动模式 / Behavior preset",
+      "min_distance": "与车辆/车位最小距离（米）/ Min distance from vehicle/slot (m)",
+      "heading_noise": "航向噪声（度）/ Heading noise (deg)"
+    },
+    "count": 2,
+    "radius": 1.0,
+    "speed_range": [
+      0.5,
+      1.0
+    ],
+    "behavior": "goal_driven",
+    "min_distance": 4.0,
+    "heading_noise": 15.0
+  },
+  "reward": {
+    "__notes": {
+      "distance_scale": "距离奖励权重 / Distance reward weight",
+      "heading_scale": "朝向奖励权重 / Heading reward weight",
+      "collision": "碰撞惩罚 / Collision penalty",
+      "success": "成功奖励 / Success bonus",
+      "smoothness": "转向平滑惩罚系数 / Steering smoothness penalty",
+      "step_cost": "时间步成本 / Step cost",
+      "velocity_penalty": "速度惩罚系数 / Velocity penalty"
+    },
+    "distance_scale": 1.5,
+    "heading_scale": 0.5,
+    "collision": -120.0,
+    "success": 140.0,
+    "smoothness": 0.05,
+    "step_cost": 0.2,
+    "velocity_penalty": 0.3
+  },
+  "success_thresholds": {
+    "__notes": {
+      "position": "位置误差阈值（米）/ Position tolerance (m)",
+      "orientation": "朝向误差阈值（度）/ Orientation tolerance (deg)",
+      "speed": "速度阈值（米/秒）/ Speed tolerance (m/s)",
+      "steering": "方向盘角度阈值（度）/ Steering angle tolerance (deg)"
+    },
+    "position": 0.4,
+    "orientation": 6.0,
+    "speed": 0.3,
+    "steering": 5.0
+  },
+  "rng_seed": 42
+}
