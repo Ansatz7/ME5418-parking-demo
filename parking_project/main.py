@@ -16,6 +16,9 @@ import numpy as np
 from parking_gym import DEFAULT_CONFIG, ParkingEnv
 
 
+# ---------------------------------------------------------------------------
+# Configuration helpers 配置辅助函数
+# ---------------------------------------------------------------------------
 def build_config(overrides: Optional[Dict] = None) -> Dict:
     """Return the default degree-based demo config, optionally merged with overrides.
 
@@ -78,6 +81,9 @@ def load_config(path: Path) -> Dict:
         return data
 
 
+# ---------------------------------------------------------------------------
+# Manual controller definition 手动控制器定义
+# ---------------------------------------------------------------------------
 class ManualController:
     def __init__(self, vehicle_cfg: Optional[Dict] = None) -> None:
         """Keyboard-driven controller using config-defined acceleration deltas.
@@ -134,6 +140,9 @@ class ManualController:
         return np.array([self.longitudinal, self.steering], dtype=np.float32)
 
 
+# ---------------------------------------------------------------------------
+# Demo loops 演示主循环
+# ---------------------------------------------------------------------------
 def manual_demo(
     episodes: int,
     max_steps: int,
@@ -142,12 +151,18 @@ def manual_demo(
     *,
     config: Optional[Dict] = None,
 ) -> None:
+    """Run the interactive manual-driving loop with keyboard control.
+
+    启动带键盘控制的手动演示循环，可实时渲染车辆状态。
+    """
     env = ParkingEnv(config=config or build_config())
+    # ManualController keeps per-key accelerations mirrored from vehicle cfg
+    # 手动控制器读取车辆配置中的按键加速度增量，保持交互一致。
     controller = ManualController(env.vehicle_cfg)
     obs, info = env.reset()
     env.render()
     if env.fig is not None:
-        env.fig.set_size_inches(8, 6, forward=True)
+        env.fig.set_size_inches(12, 6, forward=True)
     controller.attach(env)
 
     for ep in range(episodes):
@@ -155,7 +170,7 @@ def manual_demo(
             obs, info = env.reset()
             env.render()
             if env.fig is not None:
-                env.fig.set_size_inches(8, 6, forward=True)
+                env.fig.set_size_inches(12, 6, forward=True)
         step = 0
         while controller.running and step < max_steps:
             action = controller.action()  # 人类键盘输入 -> 连续动作 / Human input to continuous action
@@ -187,6 +202,10 @@ def random_policy_demo(
     sleep_scale: float = 0.5,
     config: Optional[Dict] = None,
 ) -> None:
+    """Play episodes with random actions for smoke-testing the environment.
+
+    使用随机策略运行若干回合，便于快速验收环境行为。
+    """
     env = ParkingEnv(config=config or build_config())
     try:
         for ep in range(episodes):
@@ -195,7 +214,7 @@ def random_policy_demo(
             if visualize:
                 env.render()
                 if env.fig is not None:
-                    env.fig.set_size_inches(8, 6, forward=True)
+                    env.fig.set_size_inches(12, 6, forward=True)
             for step in range(max_steps):
                 action = env.action_space.sample()
                 obs, reward, terminated, truncated, info = env.step(action)
@@ -216,7 +235,13 @@ def random_policy_demo(
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the demo launcher.
+
+    解析演示脚本的命令行参数（模式、轮次、配置文件等）。
+    """
     parser = argparse.ArgumentParser(description="ParkingEnv demo runner.")
+    # mode, episodes, max-steps define the high-level roll-out settings
+    # 运行模式、轮次数量、最大步数决定演示循环的宏观参数。
     parser.add_argument("--mode", choices=["manual", "random"], default="random")
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--max-steps", type=int, default=400)
@@ -235,7 +260,13 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Entry point that resolves config overrides and dispatches demos.
+
+    主入口：合并配置覆盖项后执行手动或随机演示。
+    """
     args = parse_args()
+    # Start from tuned defaults, then merge any JSON overrides supplied by user
+    # 以调好的默认配置为起点，再合并用户提供的 JSON 覆盖值。
     config = build_config()
     if args.config is not None:
         try:

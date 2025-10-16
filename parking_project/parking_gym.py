@@ -23,9 +23,13 @@ except ImportError:  # pragma: no cover - IPython not always available
 # 默认配置（以及外部覆盖项）中的角度均采用度数表示。
 DEFAULT_CONFIG: Dict = {
     "dt": 0.1,
-    "max_steps": 400,
-    "field_size": 70.0,
+    "max_steps": 4000,
+    "field_size": 60.0,
     "ray_max_range": 12.0,
+    "observation_noise": {
+        "enabled": True,
+        "std": 0.005,
+    },
     "ray_angles": [
         -135.0,
         -90.0,
@@ -35,6 +39,7 @@ DEFAULT_CONFIG: Dict = {
         60.0,
         90.0,
         135.0,
+        0.0,
     ],
     "vehicle": {
         "length": 4.0,
@@ -42,15 +47,17 @@ DEFAULT_CONFIG: Dict = {
         "wheel_base": 2.5,
         "max_speed": 3.0,
         "max_reverse_speed": -2.0,
-        "max_steering_angle": 45.0,
-        "max_steering_rate": 60.0,
-        "steering_damping": 0.6,
-    "steering_rate_damping": 0.25,  # viscous term for steering-rate damping (rad/s^2 per rad/s)
-    "steering_assist_deadband": 0.05,  # rad/s^2 tolerance before assist engages
+        "max_steering_angle": 60.0,
+        "max_steering_rate": 30.0,
+        "steering_damping": 52.5,
+        "steering_rate_damping": 8.75,  # viscous term for steering-rate damping (rad/s^2 per rad/s)
+        "steering_assist_deadband": 0.03,  # rad/s^2 tolerance before assist engages
+        "velocity_damping": 2.45,
+        "velocity_deadband": 0.03,
         "enable_steering_assist": True,
-    "manual_forward_accel": 1.5,
-    "manual_reverse_accel": 2.0,
-    "manual_steering_accel": 1.0,
+        "manual_forward_accel": 1.5,
+        "manual_reverse_accel": 2.0,
+        "manual_steering_accel": 10.0,
     },
     "spawn_region": [-6.0, 6.0, -6.0, 6.0],
     "parking_slot": {
@@ -58,7 +65,7 @@ DEFAULT_CONFIG: Dict = {
         "width": 2.5,
         "offset_x_range": (-7.0, -3.0),
         "offset_y_range": (-4.0, 4.0),
-        "orientation_range": (-30.0, 30.0),
+        "orientation_range": (0.0, 0.0),
     },
     "static_obstacles": {
         "count": 3,
@@ -67,10 +74,10 @@ DEFAULT_CONFIG: Dict = {
         "seed": None,
     },
     "dynamic_obstacles": {
-        "count": 1,
+        "count": 2,
         "radius": 1.0,
         "speed_range": (0.5, 1.0),
-        "behavior": "random_walk",
+        "behavior": "goal_driven",
         "min_distance": 4.0,
         "heading_noise": 15.0,
     },
@@ -94,6 +101,10 @@ DEFAULT_CONFIG: Dict = {
 
 
 class ParkingEnv(gym.Env):
+    """Gymnasium-compatible parking environment with lidar-based observations.
+
+    基于 Gymnasium 的泊车环境，观测包含多束激光距离与车辆/车位的相对姿态。
+    """
     metadata = {"render_modes": ["human"]}
 
     def __init__(self, config: Optional[Dict] = None, render_mode: str = "human") -> None:
@@ -104,18 +115,27 @@ class ParkingEnv(gym.Env):
         self.vehicle_cfg = self.config["vehicle"]
         self.reward_cfg = self.config["reward"]
         self.success_cfg = self.config["success_thresholds"]
+        obs_noise_cfg = self.config.get("observation_noise", {})
+        self.obs_noise_enabled = bool(obs_noise_cfg.get("enabled", True))
+        self.obs_noise_std = float(obs_noise_cfg.get("std", 0.005))  # σ matches DEFAULT_CONFIG
+        if self.obs_noise_std < 0.0:
+            raise ValueError("Observation noise std must be non-negative.")
 
         self.dt = self.config["dt"]
         self.field_size = self.config["field_size"]
         self.half_field = self.field_size / 2.0
 
         self.num_rays = len(self.config["ray_angles"])
-        assert self.num_rays == 8, "State definition expects eight ray distances."
+        if self.num_rays <= 0:
+            raise ValueError("Config must specify at least one ray angle.")
+
+        self._base_obs_dim = 11  # core features before appending ray distances
+        self.obs_dim = self._base_obs_dim + self.num_rays
 
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(19,),
+            shape=(self.obs_dim,),
             dtype=np.float32,
         )
         self.action_space = spaces.Box(
@@ -130,10 +150,31 @@ class ParkingEnv(gym.Env):
         self.dynamic_obstacles: List[Dict] = []
 
         self.current_step = 0
+        self.last_action = np.zeros(2, dtype=float)
+        self.last_reward = 0.0
+        self.last_reward_terms: Dict[str, float] = {}
 
         self.fig = None
         self.ax = None
         self._artists = {}
+
+    def set_observation_noise(
+        self,
+        *,
+        enabled: Optional[bool] = None,
+        std: Optional[float] = None,
+    ) -> None:
+        """Toggle or retune observation noise at runtime.
+
+        运行期间启用/禁用观测噪声，或调整噪声标准差。
+        """
+        if enabled is not None:
+            self.obs_noise_enabled = bool(enabled)
+        if std is not None:
+            std = float(std)
+            if std < 0.0:
+                raise ValueError("Observation noise std must be non-negative.")
+            self.obs_noise_std = std
 
     def _merge_config(self, override: Optional[Dict]) -> Dict:
         """Merge user overrides into the default config and convert angles.
@@ -205,6 +246,9 @@ class ParkingEnv(gym.Env):
 
         observation = self._get_observation()
         info = self._initial_info()
+        self.last_action = np.zeros(2, dtype=float)
+        self.last_reward = 0.0
+        self.last_reward_terms = {}
         return observation, info
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict]:
@@ -219,6 +263,10 @@ class ParkingEnv(gym.Env):
         terminated, truncated, term_reason = self._check_termination(info)
         info["terminal_reason"] = term_reason
 
+        self.last_action = np.array(action, dtype=float)
+        self.last_reward = float(reward)
+        self.last_reward_terms = info.get("reward_terms", {}).copy()
+
         if terminated or truncated:
             info["final_observation"] = observation
 
@@ -232,7 +280,7 @@ class ParkingEnv(gym.Env):
             plt.ion()
             plt.rcParams.setdefault("keymap.save", [])
             plt.rcParams["keymap.save"] = []  # avoid save dialog on 's' key during manual control
-            self.fig, self.ax = plt.subplots(figsize=(6, 6))
+            self.fig, self.ax = plt.subplots(figsize=(12, 6))
             self.ax.set_xlim(-self.half_field, self.half_field)
             self.ax.set_ylim(-self.half_field, self.half_field)
             self.ax.set_aspect("equal")
@@ -273,15 +321,34 @@ class ParkingEnv(gym.Env):
         if self.vehicle_state:
             obs = self._get_observation(raw=True)
             sensor_values = obs[-self.num_rays :]
+            slot_error = self._vehicle_to_slot_frame()
+            ray_angles_deg = [math.degrees(angle) for angle in self.config["ray_angles"]]
+            state_dim = self.observation_space.shape[0]
+            xr, yr, dtheta = slot_error
+            cos_yaw = math.cos(self.vehicle_state['yaw'])
+            sin_yaw = math.sin(self.vehicle_state['yaw'])
+            cos_dtheta = math.cos(dtheta)
+            sin_dtheta = math.sin(dtheta)
             text_lines = [
-                f"Step: {self.current_step}",
-                f"Velocity: {self.vehicle_state['velocity']:.2f} m/s",
-                f"Steering angle: {math.degrees(self.vehicle_state['steering_angle']):.1f} deg",
+                f"Step: {self.current_step} (dt={self.dt:.2f}s)",
+                f"State ({state_dim} dims):",
+                "  Relative slot frame:",
+                f"    xr={xr:.2f} m, yr={yr:.2f} m",
+                f"    delta yaw={math.degrees(dtheta):+.1f} deg (cos={cos_dtheta:+.2f}, sin={sin_dtheta:+.2f})",
+                f"    dv={self.vehicle_state['velocity'] - 0.0:+.2f} m/s (target=0)",
+                "  Vehicle dynamics:",
+                f"    v={self.vehicle_state['velocity']:.2f} m/s",
+                f"    steering angle={math.degrees(self.vehicle_state['steering_angle']):+.1f} deg",
+                f"    steering rate={math.degrees(self.vehicle_state['steering_rate']):+.1f} deg/s",
+                "  Global pose (for cos/sin encoding):",
+                f"    x={self.vehicle_state['x']:.2f} m, y={self.vehicle_state['y']:.2f} m",
+                f"    cos(yaw)={cos_yaw:+.2f}, sin(yaw)={sin_yaw:+.2f}",
+                f"  Rays ({self.num_rays} beams, normalized 0-1):",
             ]
             text_lines.extend(
                 [
-                    f"Ray {idx}: {dist:.2f}"
-                    for idx, dist in enumerate(sensor_values, start=1)
+                    f"    Ray {idx} ({angle:+.0f} deg): {dist:.2f}"
+                    for idx, (angle, dist) in enumerate(zip(ray_angles_deg, sensor_values), start=1)
                 ]
             )
             self.ax.text(
@@ -291,6 +358,48 @@ class ParkingEnv(gym.Env):
                 transform=self.ax.transAxes,
                 fontsize=8,
                 va="top",
+            )
+
+            action_lines = [
+                "Action input (lon, steer):",
+                f"  lon accel: {self.last_action[0]:+.2f} m/s^2",
+                f"  steer accel: {math.degrees(self.last_action[1]):+.1f} deg/s^2",
+            ]
+            self.ax.text(
+                -0.32,
+                0.99,
+                "\n".join(action_lines),
+                transform=self.ax.transAxes,
+                fontsize=8,
+                va="top",
+                ha="left",
+            )
+
+            if self.last_reward_terms:
+                reward_lines = [
+                    "Reward components:",
+                    f"  total: {self.last_reward:+.2f}",
+                    f"  distance: {self.last_reward_terms.get('distance', 0.0):+.2f}",
+                    f"  heading: {self.last_reward_terms.get('heading', 0.0):+.2f}",
+                    f"  velocity: {self.last_reward_terms.get('velocity', 0.0):+.2f}",
+                    f"  smoothness: {self.last_reward_terms.get('smoothness', 0.0):+.2f}",
+                    f"  step: {self.last_reward_terms.get('step', 0.0):+.2f}",
+                    f"  collision: {self.last_reward_terms.get('collision', 0.0):+.2f}",
+                    f"  success: {self.last_reward_terms.get('success', 0.0):+.2f}",
+                ]
+            else:
+                reward_lines = [
+                    "Reward components:",
+                    "  total: 0.00",
+                ]
+            self.ax.text(
+                -0.32,
+                0.55,
+                "\n".join(reward_lines),
+                transform=self.ax.transAxes,
+                fontsize=8,
+                va="top",
+                ha="left",
             )
 
         plt.pause(0.001)
@@ -402,6 +511,7 @@ class ParkingEnv(gym.Env):
             self.dynamic_obstacles.append(obstacle)
 
     # Update functions -------------------------------------------------------
+    # 状态更新函数集，负责车辆、动态障碍等的时间推进。
     def _update_vehicle(self, action: np.ndarray) -> None:
         """Integrate vehicle dynamics for one time-step.
 
@@ -411,6 +521,10 @@ class ParkingEnv(gym.Env):
         steering_accel = float(action[1])
 
         vel = self.vehicle_state["velocity"]
+        velocity_deadband = self.vehicle_cfg.get("velocity_deadband", 0.0)
+        velocity_damping = self.vehicle_cfg.get("velocity_damping", 0.0)
+        if abs(accel) <= velocity_deadband and velocity_damping > 0.0:
+            accel -= velocity_damping * vel
         vel += accel * self.dt
         vel = np.clip(
             vel,
@@ -507,6 +621,7 @@ class ParkingEnv(gym.Env):
                     obstacle["heading"] = self._wrap_angle(obstacle["heading"] + math.pi)
 
     # Observation & reward ---------------------------------------------------
+    # 观测/奖励相关逻辑：组装状态向量、计算奖励与终止条件。
     def _get_observation(self, raw: bool = False) -> np.ndarray:
         x = self.vehicle_state["x"]
         y = self.vehicle_state["y"]
@@ -536,8 +651,15 @@ class ParkingEnv(gym.Env):
             dtype=np.float32,
         )
 
-        if not raw:
-            obs += self.rng.normal(0.0, 0.005, size=obs.shape)
+        if obs.shape[0] != self.obs_dim:
+            raise RuntimeError(
+                f"Observation dimension mismatch: expected {self.obs_dim}, got {obs.shape[0]}"
+            )
+
+        if not raw and self.obs_noise_enabled and self.obs_noise_std > 0.0:
+            # Apply configurable Gaussian noise to encourage policy robustness
+            # 叠加可配置的高斯噪声，提升策略对传感抖动的鲁棒性。
+            obs += self.rng.normal(0.0, self.obs_noise_std, size=obs.shape)
 
         return obs
 
@@ -551,22 +673,37 @@ class ParkingEnv(gym.Env):
         success = self._check_success(rel_slot, velocity)
 
         reward = 0.0
-        reward -= self.reward_cfg["distance_scale"] * distance
-        reward -= self.reward_cfg["heading_scale"] * heading_error
-        reward -= self.reward_cfg["velocity_penalty"] * velocity
-        reward -= self.reward_cfg["smoothness"] * (steering_rate ** 2)
-        reward -= self.reward_cfg["step_cost"]
+        distance_term = -self.reward_cfg["distance_scale"] * distance
+        heading_term = -self.reward_cfg["heading_scale"] * heading_error
+        velocity_term = -self.reward_cfg["velocity_penalty"] * velocity
+        smoothness_term = -self.reward_cfg["smoothness"] * (steering_rate ** 2)
+        step_term = -self.reward_cfg["step_cost"]
 
-        if collision:
-            reward += self.reward_cfg["collision"]
-        if success:
-            reward += self.reward_cfg["success"]
+        collision_term = self.reward_cfg["collision"] if collision else 0.0
+        success_term = self.reward_cfg["success"] if success else 0.0
+
+        reward += distance_term
+        reward += heading_term
+        reward += velocity_term
+        reward += smoothness_term
+        reward += step_term
+        reward += collision_term
+        reward += success_term
 
         info = {
             "distance_to_slot": distance,
             "heading_error": heading_error,
             "collision": collision,
             "success": success,
+            "reward_terms": {
+                "distance": distance_term,
+                "heading": heading_term,
+                "velocity": velocity_term,
+                "smoothness": smoothness_term,
+                "step": step_term,
+                "collision": collision_term,
+                "success": success_term,
+            },
         }
         return reward, info
 
@@ -597,7 +734,6 @@ class ParkingEnv(gym.Env):
 
     def _check_collision(self) -> bool:
         vehicle_poly = self._vehicle_polygon()
-        collision_radius = np.hypot(self.vehicle_cfg["length"], self.vehicle_cfg["width"]) / 2.0
 
         for obstacle in self.static_obstacles:
             rect = self._obstacle_rectangle(obstacle)
@@ -605,8 +741,7 @@ class ParkingEnv(gym.Env):
                 return True
 
         for obstacle in self.dynamic_obstacles:
-            distance = np.linalg.norm(obstacle["pos"] - np.array([self.vehicle_state["x"], self.vehicle_state["y"]]))
-            if distance <= obstacle["radius"] + collision_radius:
+            if self._polygon_circle_collision(vehicle_poly, obstacle["pos"], obstacle["radius"]):
                 return True
 
         return False
@@ -619,6 +754,7 @@ class ParkingEnv(gym.Env):
         return pos_ok and heading_ok and steering_ok and speed_ok
 
     # Geometry helpers -------------------------------------------------------
+    # 几何辅助函数：用于碰撞检测与坐标系转换。
     def _vehicle_polygon(self) -> np.ndarray:
         length = self.vehicle_cfg["length"]
         width = self.vehicle_cfg["width"]
@@ -664,6 +800,41 @@ class ParkingEnv(gym.Env):
             return False
         return True
 
+    def _polygon_circle_collision(self, poly: np.ndarray, center: np.ndarray, radius: float) -> bool:
+        if self._point_in_polygon(center, poly):
+            return True
+        for i in range(len(poly)):
+            p1 = poly[i]
+            p2 = poly[(i + 1) % len(poly)]
+            if self._distance_point_to_segment(center, p1, p2) <= radius:
+                return True
+        return False
+
+    def _distance_point_to_segment(self, point: np.ndarray, seg_start: np.ndarray, seg_end: np.ndarray) -> float:
+        seg_vec = seg_end - seg_start
+        seg_len_sq = np.dot(seg_vec, seg_vec)
+        if seg_len_sq == 0.0:
+            return float(np.linalg.norm(point - seg_start))
+        t = np.dot(point - seg_start, seg_vec) / seg_len_sq
+        t = np.clip(t, 0.0, 1.0)
+        projection = seg_start + t * seg_vec
+        return float(np.linalg.norm(point - projection))
+
+    def _point_in_polygon(self, point: np.ndarray, poly: np.ndarray) -> bool:
+        x, y = point
+        inside = False
+        j = len(poly) - 1
+        for i in range(len(poly)):
+            xi, yi = poly[i]
+            xj, yj = poly[j]
+            intersects = ((yi > y) != (yj > y)) and (
+                x < (xj - xi) * (y - yi) / ((yj - yi) if (yj - yi) != 0 else 1e-12) + xi
+            )
+            if intersects:
+                inside = not inside
+            j = i
+        return inside
+
     def _separating_axis_theorem(self, poly_a: np.ndarray, poly_b: np.ndarray) -> bool:
         def _normals(poly: np.ndarray) -> List[np.ndarray]:
             normals = []
@@ -690,7 +861,7 @@ class ParkingEnv(gym.Env):
 
     def _cast_rays(self) -> List[float]:
         ray_distances = []
-        origin = np.array([self.vehicle_state["x"], self.vehicle_state["y"]])
+        origin = np.mean(self._vehicle_polygon(), axis=0)
         base_yaw = self.vehicle_state["yaw"]
         max_range = self.config["ray_max_range"]
 
@@ -808,6 +979,7 @@ class ParkingEnv(gym.Env):
         return np.array([local[0], local[1], yaw_error])
 
     # Drawing helpers --------------------------------------------------------
+    # 绘图辅助函数：负责 Matplotlib 渲染车辆、车位、传感器射线等元素。
     def _draw_vehicle(self) -> None:
         required_keys = {"x", "y", "yaw", "steering_angle"}
         if not required_keys.issubset(self.vehicle_state.keys()):
@@ -815,24 +987,29 @@ class ParkingEnv(gym.Env):
         poly = self._vehicle_polygon()
         self.ax.fill(poly[:, 0], poly[:, 1], color="#1f77b4", alpha=0.6)
 
-        front_center = np.mean(poly[:2], axis=0)
+        rear_edge = poly[2:4]
         self.ax.plot(
-            [self.vehicle_state["x"], front_center[0]],
-            [self.vehicle_state["y"], front_center[1]],
-            color="k",
-            linewidth=1.5,
+            rear_edge[:, 0],
+            rear_edge[:, 1],
+            color="red",
+            linewidth=2.0,
         )
 
+        body_center = np.mean(poly, axis=0)
+
         wheel_base = self.vehicle_cfg["wheel_base"]
-        rear_axle = np.array([self.vehicle_state["x"], self.vehicle_state["y"]])
         heading = self.vehicle_state["yaw"]
-        front_axle = rear_axle + wheel_base * np.array(
-            [math.cos(heading), math.sin(heading)]
-        )
+        axle_dir = np.array([math.cos(heading), math.sin(heading)])
+        half_wheel_base = wheel_base / 2.0
+        rear_axle = body_center - half_wheel_base * axle_dir
+        front_axle = body_center + half_wheel_base * axle_dir
 
         wheel_length = 0.5
         wheel_width = 0.2
-        for axle_center, steering in ((front_axle, self.vehicle_state["steering_angle"]), (rear_axle, 0.0)):
+        for axle_center, steering in (
+            (front_axle, self.vehicle_state["steering_angle"]),
+            (rear_axle, 0.0),
+        ):
             for offset in (-0.6, 0.6):
                 lateral = np.array([-math.sin(heading), math.cos(heading)]) * offset
                 wheel_center = axle_center + lateral
@@ -875,17 +1052,40 @@ class ParkingEnv(gym.Env):
 
         if center is None or rotation is None:
             return
-        rect = plt.Rectangle(
-            (center[0] - length / 2, center[1] - width / 2),
-            length,
-            width,
-            angle=math.degrees(rotation),
+        half_length = length / 2.0
+        half_width = width / 2.0
+        corners_local = np.array(
+            [
+                [half_length, half_width],
+                [half_length, -half_width],
+                [-half_length, -half_width],
+                [-half_length, half_width],
+            ]
+        )
+        rotation_matrix = np.array(
+            [
+                [math.cos(rotation), -math.sin(rotation)],
+                [math.sin(rotation), math.cos(rotation)],
+            ]
+        )
+        corners_world = corners_local @ rotation_matrix.T + center
+        slot_patch = plt.Polygon(
+            corners_world,
+            closed=True,
             fill=False,
             linestyle="--",
             edgecolor="#2ca02c",
             linewidth=2.0,
         )
-        self.ax.add_patch(rect)
+        self.ax.add_patch(slot_patch)
+
+        rear_edge = corners_world[2:4]
+        self.ax.plot(
+            rear_edge[:, 0],
+            rear_edge[:, 1],
+            color="red",
+            linewidth=2.0,
+        )
 
     def _draw_static_obstacles(self) -> None:
         for obstacle in self.static_obstacles:
@@ -911,7 +1111,7 @@ class ParkingEnv(gym.Env):
             self.ax.add_patch(patch)
 
     def _draw_rays(self) -> None:
-        origin = np.array([self.vehicle_state["x"], self.vehicle_state["y"]])
+        origin = np.mean(self._vehicle_polygon(), axis=0)
         base_yaw = self.vehicle_state["yaw"]
         max_range = self.config["ray_max_range"]
 
@@ -928,6 +1128,7 @@ class ParkingEnv(gym.Env):
             )
 
     # Utility ----------------------------------------------------------------
+    # 工具函数：角度规整、随机采样等通用方法。
     def _wrap_angle(self, angle: float) -> float:
         return (angle + math.pi) % (2 * math.pi) - math.pi
 

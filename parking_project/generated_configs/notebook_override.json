@@ -8,7 +8,7 @@
   },
   "dt": 0.1,
   "max_steps": 4000,
-  "field_size": 40.0,
+  "field_size": 60.0,
   "ray_max_range": 12.0,
   "ray_angles": [
     -135.0,
@@ -18,7 +18,8 @@
     30.0,
     60.0,
     90.0,
-    135.0
+    135.0,
+    0.0
   ],
   "_spawn_region_notes": "出生区域 [xmin, xmax, ymin, ymax]（米）/ Spawn region bounds [xmin, xmax, ymin, ymax] in meters",
   "vehicle": {
@@ -33,6 +34,8 @@
       "steering_damping": "回正比例系数 Kp / Steering assist Kp",
       "steering_rate_damping": "回正速度阻尼系数 Kd / Steering assist Kd",
       "steering_assist_deadband": "回正启动阈值（度/秒²）/ Assist deadband (deg/s²)",
+      "velocity_damping": "油门释放阻尼系数 K / Longitudinal damping gain",
+      "velocity_deadband": "油门释放阻尼激活阈值（米/秒²）/ Longitudinal deadband (m/s²)",
       "enable_steering_assist": "是否启用方向盘回正辅助 / Enable steering assist",
       "manual_forward_accel": "手动模式 W 键纵向增量（米/秒²）/ Manual forward accel step",
       "manual_reverse_accel": "手动模式 S 键纵向增量（米/秒²）/ Manual reverse accel step",
@@ -45,9 +48,11 @@
     "max_reverse_speed": -2.0,
     "max_steering_angle": 60,
     "max_steering_rate": 30.0,
-    "steering_damping": 48.1,
-    "steering_rate_damping": 8.450000000000001,
+    "steering_damping": 52.50000000000001,
+    "steering_rate_damping": 8.75,
     "steering_assist_deadband": 0.03,
+    "velocity_damping": 2.45,
+    "velocity_deadband": 0.03,
     "enable_steering_assist": true,
     "manual_forward_accel": 1.5,
     "manual_reverse_accel": 2.0,

@@ -8,6 +8,7 @@ dependencies:
   - matplotlib=3.7.1
   - ipykernel
   - ipython
+  - notebook
   - pyqt>=5.15
   - pip
   - pip:
