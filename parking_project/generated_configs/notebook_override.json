@@ -8,7 +8,7 @@
   },
   "dt": 0.1,
   "max_steps": 4000,
-  "field_size": 60.0,
+  "field_size": 30.0,
   "ray_max_range": 12.0,
   "ray_angles": [
     -135.0,
