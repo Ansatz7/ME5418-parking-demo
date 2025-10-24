@@ -12,4 +12,5 @@ dependencies:
   - pyqt>=5.15
   - pip
   - pip:
+    - torch==2.2.2
       - gymnasium==0.29.1

@@ -22,7 +22,7 @@ conda env update -f environment.yml --prune
 conda activate parking-rl
 ```
 
-Ensure Qt GUI support is available (the environment installs `pyqt>=5.15`). On headless Linux hosts you may need to export `QT_QPA_PLATFORM=offscreen` or use X11 forwarding. The environment also bundles the classic Jupyter Notebook server so you can launch the demo straight from this Conda env.
+Key packages pulled in by the environment include Gymnasium 0.29.1 and **PyTorch 2.2.2 (CPU build)** for the upcoming PPO training notebook. Ensure Qt GUI support is available (the environment installs `pyqt>=5.15`). On headless Linux hosts you may need to export `QT_QPA_PLATFORM=offscreen` or use X11 forwarding. The environment also bundles the classic Jupyter Notebook server so you can launch the demo straight from this Conda env.
 
 Launch Jupyter against this environment: when opening `ParkingEnv_Demo.ipynb`, pick the kernel shown as `python3 (parking-rl)` so the notebook runs inside the freshly created environment.
 
@@ -150,6 +150,7 @@ conda env update -f environment.yml --prune
 conda activate parking-rl
 ```
 
+主要依赖包括 Gymnasium 0.29.1 以及 **PyTorch 2.2.2（CPU 版本）**，后续的 PPO 训练 Notebook 会使用它来构建策略网络。
 系统需支持 Qt 图形界面（环境已包含 `pyqt>=5.15`）。
 若在无界面的 Linux 环境中运行，可设置：
 
