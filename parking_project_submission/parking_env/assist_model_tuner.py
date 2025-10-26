@@ -24,7 +24,8 @@ try:
 except Exception as exc:  # pragma: no cover - matplotlib import errors surface quickly
     raise SystemExit(f"Failed to import matplotlib: {exc}")
 
-from .parking_gym import DEFAULT_CONFIG
+from .env import DEFAULT_CONFIG
+from parking_project_submission.modules.utils import read_json, write_json
 
 
 # ---------------------------------------------------------------------------
@@ -120,16 +121,17 @@ def load_vehicle_config(config_path: Path | None) -> Dict[str, Any]:
     从给定 JSON 读取车辆配置，若缺省则返回内置默认值。
     """
     if config_path is None:
-        # Use a shallow copy to avoid mutating DEFAULT_CONFIG in-place.
-        return json.loads(json.dumps(DEFAULT_CONFIG))["vehicle"]
+        default_path = Path("parking_project_submission/configs/demo_default.json")
+        try:
+            return read_json(default_path)["vehicle"]
+        except FileNotFoundError:
+            # Fallback to a deep copy of DEFAULT_CONFIG if packaged config is absent.
+            return json.loads(json.dumps(DEFAULT_CONFIG))["vehicle"]
 
     try:
-        with config_path.open("r", encoding="utf-8") as fh:
-            cfg = json.load(fh)
+        cfg = read_json(config_path)
     except FileNotFoundError:
         raise SystemExit(f"Config file '{config_path}' not found.")
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"Config file '{config_path}' is not valid JSON: {exc}.")
 
     if "vehicle" not in cfg:
         raise SystemExit("Config file does not contain a 'vehicle' section.")
@@ -146,20 +148,17 @@ def persist_vehicle_config(
     将更新后的车辆配置写回 JSON，保持其余键不变。
     """
     try:
-        with config_path.open("r", encoding="utf-8") as fh:
-            root_cfg = json.load(fh)
+        root_cfg = read_json(config_path)
     except FileNotFoundError:
         root_cfg = {}
-    except json.JSONDecodeError as exc:
+    except json.JSONDecodeError as exc:  # type: ignore[name-defined]
         raise SystemExit(f"Config file '{config_path}' became invalid JSON: {exc}.")
 
     root_cfg.setdefault("vehicle", {})
     root_cfg["vehicle"].update(vehicle_cfg)
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    with config_path.open("w", encoding="utf-8") as fh:
-        json.dump(root_cfg, fh, indent=indent, ensure_ascii=False)
-        fh.write("\n")
+    write_json(config_path, root_cfg)
 
 
 def launch_tuner(args: argparse.Namespace) -> None:

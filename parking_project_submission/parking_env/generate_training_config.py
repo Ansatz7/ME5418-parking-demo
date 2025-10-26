@@ -7,13 +7,13 @@ remains the single source of truth for those values.
 """
 
 import argparse
-import json
 import random
 from copy import deepcopy
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from .parking_gym import DEFAULT_CONFIG
+from .env import DEFAULT_CONFIG
+from parking_project_submission.modules.utils import write_json
 
 
 # ---------------------------------------------------------------------------
@@ -106,13 +106,9 @@ def sample_training_config(seed: Optional[int] = None) -> Dict:
 # CLI plumbing 命令行接口
 # ---------------------------------------------------------------------------
 def write_config(config: Dict, path: Path) -> None:
-    """Serialize config to JSON with UTF-8 and trailing newline.
+    """Serialize ``config`` to ``path`` using the shared utility helper."""
 
-    以 UTF-8 写出 JSON 并保留结尾换行，便于版本管理对比。
-    """
-    with path.open("w", encoding="utf-8") as fh:
-        json.dump(config, fh, indent=2)
-        fh.write("\n")
+    write_json(path, config)
 
 
 def parse_args() -> argparse.Namespace:
@@ -121,7 +117,13 @@ def parse_args() -> argparse.Namespace:
     解析命令行选项，控制生成文件的输出路径与随机种子。
     """
     parser = argparse.ArgumentParser(description="Generate randomized ParkingEnv configs.")
-    parser.add_argument("--out", type=Path, required=True, help="Output JSON file path.")
+    default_out = Path("parking_project_submission/configs/train_random.json")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=default_out,
+        help=f"Output JSON file path (default: {default_out}).",
+    )
     parser.add_argument(
         "--seed",
         type=int,
@@ -140,7 +142,6 @@ def main() -> None:
     # Deterministic when --seed supplied; otherwise rely on fresh RNG jitter.
     # 当传入 --seed 时结果可复现，否则每次随机生成全新场景。
     config = sample_training_config(args.seed)
-    args.out.parent.mkdir(parents=True, exist_ok=True)
     write_config(config, args.out)
     print(f"Wrote config to {args.out}")
 

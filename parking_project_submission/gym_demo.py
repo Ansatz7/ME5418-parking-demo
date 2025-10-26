@@ -1,0 +1,58 @@
+"""Single-entry demo script for the parking environment."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Sequence
+
+from parking_project_submission.modules import DemoOptions, run_demo
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Parking environment demo runner (manual/random modes)."
+    )
+    parser.add_argument("--mode", choices=["random", "manual"], default="manual")
+    parser.add_argument("--episodes", type=int, default=1)
+    parser.add_argument("--max-steps", type=int, default=4000)
+    parser.add_argument(
+        "--sleep-scale",
+        type=float,
+        default=0.0,
+        help="Animation slowdown factor; leave at 0 for fastest headless runs.",
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="Optional JSON config path overriding the default demo settings.",
+    )
+    parser.add_argument(
+        "--no-visualize",
+        action="store_true",
+        help="Disable matplotlib rendering (useful for automated smoke tests).",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress per-step logging for less verbose console output.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    args = parse_args(argv)
+    options = DemoOptions(
+        mode=args.mode,
+        episodes=args.episodes,
+        max_steps=args.max_steps,
+        sleep_scale=args.sleep_scale,
+        config_path=args.config,
+        visualize=not args.no_visualize,
+        verbose=not args.quiet,
+    )
+    run_demo(options)
+
+
+if __name__ == "__main__":
+    main()
