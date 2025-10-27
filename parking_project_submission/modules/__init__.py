@@ -6,7 +6,12 @@
 
 from .workflow import DemoOptions, run_demo, run_manual_demo, run_random_demo
 from .utils import read_json, write_json
-from .networks import ActorCriticOutput, RecurrentActorCritic
+from .networks import (
+    ActorCriticOutput,
+    RecurrentActorCritic,
+    ActorCriticOutputLSTM,
+    RecurrentActorCriticLidar,
+)
 
 __all__ = [
 	"DemoOptions",
@@ -17,4 +22,6 @@ __all__ = [
 	"write_json",
 	"ActorCriticOutput",
 	"RecurrentActorCritic",
+    "ActorCriticOutputLSTM",
+    "RecurrentActorCriticLidar",
 ]

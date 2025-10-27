@@ -52,6 +52,36 @@ mamba deactivate
 
 *All commands also work if you substitute `mamba` with `conda`. The new dependency list includes `PyQt5`, so the GUI tuner works out of the box.*
 
+#### One-Command Evaluation
+
+For grading, just run the single entry file without any arguments:
+
+```bash
+bash run_submission.sh
+```
+
+This performs a short, headless rollout using the default configuration.
+
+#### Helper Scripts
+
+- Create or update the environment and install the package in editable mode (auto-detects mamba/conda):
+
+  ```bash
+  bash scripts/setup_env.sh
+  ```
+
+- Run non-interactive smoke tests (random rollout + randomized-config test):
+
+  ```bash
+  bash scripts/quick_test.sh
+  ```
+
+- Clean build metadata and caches (optional):
+
+  ```bash
+  bash scripts/clean.sh
+  ```
+
 #### Repository Layout
 
 ```
@@ -187,6 +217,36 @@ mamba deactivate
 ```
 
 *依赖列表已包含 `PyQt5`，助力调参 GUI 默认可用；若只使用命令行，也可自行改为精简安装。*
+
+#### 一键评测（无参数）
+
+评测时，只需运行一个入口脚本，无需任何参数：
+
+```bash
+bash run_submission.sh
+```
+
+此脚本会使用默认配置执行一段短程、无可视化的随机策略回放，满足“一个文件、一键运行”的评测要求。
+
+#### 辅助脚本
+
+- 一键创建/更新环境并安装（自动检测 mamba/conda）：
+
+  ```bash
+  bash scripts/setup_env.sh
+  ```
+
+- 快速自检（无 UI 的随机回放 + 随机场景再跑一遍）：
+
+  ```bash
+  bash scripts/quick_test.sh
+  ```
+
+- 清理构建产物与缓存（可选）：
+
+  ```bash
+  bash scripts/clean.sh
+  ```
 
 #### 仓库结构
 
