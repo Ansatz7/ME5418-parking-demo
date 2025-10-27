@@ -63,7 +63,7 @@
     "max_reverse_speed": -2.0,
     "max_steering_angle": 60,
     "max_steering_rate": 30.0,
-    "steering_damping": 52.50000000000001,
+    "steering_damping": 19.200000000000003,
     "steering_rate_damping": 8.75,
     "steering_assist_deadband": 0.03,
     "velocity_damping": 2.45,

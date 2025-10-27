@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: parking-project-submission
+Version: 0.1.0
+Summary: Parking environment demo submission package
+Requires-Python: >=3.8,<3.13
+Requires-Dist: gymnasium==0.29.1
+Requires-Dist: matplotlib==3.7.1
+Requires-Dist: numpy==1.23.5
+Requires-Dist: torch==2.2.2
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
