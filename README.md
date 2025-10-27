@@ -155,8 +155,32 @@ Outputs include randomized spawn regions, slot placement, and obstacle layouts.
 ### Neural Network Module
 
 - **Location:** `parking_project_submission/modules/networks.py`, `parking_project_submission/neural_network_demo.py`
-- **Current status:** Recurrent actor-critic (GRU) skeleton implemented; demo script shows a single inference + backward pass using `ParkingEnv`.
-- **Next steps:** Integrate PPO training loop, add richer feature encoders, and document hyperparameters. This section will be expanded once the training pipeline lands.
+- **Backbones:** Two temporal cores with the same input encoders (base 11-dim via MLP, lidar N beams via 1D-CNN + GAP → 128). Choose one:
+  - GRU: `RecurrentActorCriticLidarGRU` (faster, single hidden state h)
+  - LSTM: `RecurrentActorCriticLidar` (richer memory, hidden (h, c))
+- **Inputs:** split observation into `[B, T, 11]` base features and `[B, T, N]` lidar distances (N equals number of rays; adaptive pooling supports variable N).
+- **Outputs:** Gaussian policy N(μ, σ) with learned log_std (clamped) and value V(s).
+
+CLI usage (no training; forward, sample, toy loss, backward):
+
+```bash
+# default: GRU, T=1, CPU
+python -m parking_project_submission.neural_network_demo
+
+# LSTM backbone, custom sequence length
+python -m parking_project_submission.neural_network_demo --arch lstm --seq-len 8
+
+# use GPU when available
+python -m parking_project_submission.neural_network_demo --device cuda --arch gru --seq-len 8
+
+# optional: export ONNX for Netron (install onnx first: pip install onnx)
+python -m parking_project_submission.neural_network_demo --arch gru  --export-onnx artifacts/model_gru.onnx
+python -m parking_project_submission.neural_network_demo --arch lstm --export-onnx artifacts/model_lstm.onnx
+```
+
+Optional helpers: `pip install onnx` for export, `pip install netron` to view `.onnx`, `pip install torchinfo` for richer summaries.
+
+- **Next steps:** Integrate PPO training loop (clip loss, value loss, entropy), GAE advantages, optimizer schedule and masks for variable-length sequences.
 
 ### Agent Learning Module
 
@@ -321,8 +345,32 @@ python -m parking_project_submission.parking_env.generate_training_config \
 ### 神经网络模块
 
 - **关键文件：** `parking_project_submission/modules/networks.py`、`parking_project_submission/neural_network_demo.py`
-- **当前状态：** 实现了 GRU 架构的 Actor-Critic 骨架，并提供示例脚本演示一次前向推理与反向传播。
-- **后续计划：** 集成 PPO 训练流程、扩展特征编码、补充超参数说明。模块文档将在完成训练脚本后同步更新。
+- **两种时序骨干（共享输入编码：基础 11 维经 MLP、LiDAR N 束经 1D-CNN+自适应池化 后各到 128 维，再融合）：**
+  - GRU：`RecurrentActorCriticLidarGRU`（更轻、更快，只有 h）
+  - LSTM：`RecurrentActorCriticLidar`（记忆力更强，(h, c)）
+- **输入形状：** 将观测拆成 `[B, T, 11]` 基础特征 与 `[B, T, N]` LiDAR 距离（N 为射线束数，自适应池化支持可变 N）。
+- **输出：** 高斯策略 N(μ, σ)（log_std 有界）与状态值 V(s)。
+
+命令行用法（不训练，仅前向、采样、玩具损失、反向）：
+
+```bash
+# 默认：GRU，T=1，CPU
+python -m parking_project_submission.neural_network_demo
+
+# 指定 LSTM 与序列长度
+python -m parking_project_submission.neural_network_demo --arch lstm --seq-len 8
+
+# 使用 GPU（若可用）
+python -m parking_project_submission.neural_network_demo --device cuda --arch gru --seq-len 8
+
+# 可选：导出 ONNX（先安装 onnx：pip install onnx）
+python -m parking_project_submission.neural_network_demo --arch gru  --export-onnx artifacts/model_gru.onnx
+python -m parking_project_submission.neural_network_demo --arch lstm --export-onnx artifacts/model_lstm.onnx
+```
+
+可选工具：`pip install onnx` 导出、`pip install netron` 浏览 `.onnx`、`pip install torchinfo` 打印更详细结构摘要。
+
+- **后续计划：** 集成 PPO（clip/value/entropy）、GAE 优势、优化器与变长序列 mask 等，完成训练部分后更新本节说明。
 
 ### Agent Learning 模块
 

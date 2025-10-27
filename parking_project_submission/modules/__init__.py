@@ -11,6 +11,8 @@ from .networks import (
     RecurrentActorCritic,
     ActorCriticOutputLSTM,
     RecurrentActorCriticLidar,
+    ActorCriticOutputGRU,
+    RecurrentActorCriticLidarGRU,
 )
 
 __all__ = [
@@ -21,7 +23,9 @@ __all__ = [
 	"read_json",
 	"write_json",
 	"ActorCriticOutput",
-	"RecurrentActorCritic",
+    "RecurrentActorCritic",
     "ActorCriticOutputLSTM",
     "RecurrentActorCriticLidar",
+    "ActorCriticOutputGRU",
+    "RecurrentActorCriticLidarGRU",
 ]
