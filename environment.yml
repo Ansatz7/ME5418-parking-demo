@@ -9,3 +9,4 @@ dependencies:
       - numpy==1.23.5
       - matplotlib==3.7.1
       - torch==2.2.2
+      - PyQt5==5.15.11
