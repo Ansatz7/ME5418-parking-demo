@@ -24,30 +24,56 @@ The default workflow uses `pip install -e .` so users can get the demo running i
 **Method A (recommended): pip install -e .**
 
 ```bash
-# ensure mamba is available (replace mamba with conda if preferred)
-conda install -n base -c conda-forge mamba
+# Make sure mamba is installed and initialized
+conda install -n base -c conda-forge mamba -y
+eval "$(mamba shell hook --shell bash)"
 
-# create a clean Python 3.10 environment
+# Create a clean Python 3.10 environment and activate it
 mamba create -n parking-rl python=3.10 -y
 mamba activate parking-rl
 
-# upgrade tooling and install the package in editable mode
-python -m pip install --upgrade pip
+# Install the package in editable mode
 pip install -e .
 
-# smoke tests
-parking-gym-demo --mode random --episodes 1 --max-steps 400
+# Run smoke tests
+echo "Running random demo..."
+parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
+echo "Running manual demo (close window to finish)..."
 parking-gym-demo --mode manual --episodes 1 --max-steps 400
 
-# leave the environment when finished
+# Deactivate when finished
 mamba deactivate
 ```
 
 **Method B: environment.yml + Mamba**
 
 ```bash
-mamba env create -f environment.yml -n parking-rl-yml
-mamba activate parking-rl-yml
+# Make sure mamba is installed and initialized
+conda install -n base -c conda-forge mamba -y
+eval "$(mamba shell hook --shell bash)"
+
+# Create environment from yml file
+mamba env create -f environment.yml
+mamba activate parking-rl
+
+# Test installation
+parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
+
+# Deactivate when finished
+mamba deactivate
+```
+
+**Method B: environment.yml + Mamba**
+
+```bash
+# Initialize mamba shell integration (only needed once)
+eval "$(mamba shell hook --shell bash)"
+
+# Create environment from yml file  
+mamba env create -f environment.yml
+mamba activate parking-rl
+
+# Test installation
 parking-gym-demo --mode random --episodes 1 --max-steps 400
 mamba deactivate
 ```
@@ -321,33 +347,59 @@ Tips: using a fixed small sequence length (e.g., `--seq-len 1`) reduces dynamic-
 
 #### 环境搭建
 
-**方法 A（推荐）：pip install -e .**
+**方法 A (推荐): pip install -e .**
 
 ```bash
-# 若已安装 mamba 可跳过此行；如习惯 conda，可将 mamba 替换为 conda
-conda install -n base -c conda-forge mamba
+# 确保 mamba 已安装并初始化
+conda install -n base -c conda-forge mamba -y
+eval "$(mamba shell hook --shell bash)"
 
-# 创建 Python 3.10 环境
+# 创建并激活一个干净的 Python 3.10 环境
 mamba create -n parking-rl python=3.10 -y
 mamba activate parking-rl
 
-# 升级 pip 并以开发模式安装本项目
-python -m pip install --upgrade pip
+# 以可编辑模式安装本包
 pip install -e .
 
-# 快速验证
-parking-gym-demo --mode random --episodes 1 --max-steps 400
+# 运行冒烟测试
+echo "正在运行随机策略演示..."
+parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
+echo "正在运行手动模式演示 (关闭窗口后结束)..."
 parking-gym-demo --mode manual --episodes 1 --max-steps 400
 
 # 完成后退出环境
 mamba deactivate
 ```
 
-**方法 B：environment.yml + Mamba**
+**方法 B: environment.yml + Mamba**
 
 ```bash
-mamba env create -f environment.yml -n parking-rl-yml
-mamba activate parking-rl-yml
+# 确保 mamba 已安装并初始化
+conda install -n base -c conda-forge mamba -y
+eval "$(mamba shell hook --shell bash)"
+
+# 从 yml 文件创建环境
+mamba env create -f environment.yml
+mamba activate parking-rl
+
+# 测试安装
+parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
+
+# 完成后退出环境
+mamba deactivate
+```
+
+**方法 B: environment.yml + Mamba**
+
+```bash
+# 初始化 mamba shell 集成（仅需执行一次）
+eval "$(mamba shell hook --shell bash)"
+
+# 从 yml 文件创建环境  
+mamba env create -f environment.yml
+mamba activate parking-rl
+
+# 测试安装
 parking-gym-demo --mode random --episodes 1 --max-steps 400
 mamba deactivate
 ```
