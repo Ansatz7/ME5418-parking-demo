@@ -157,17 +157,42 @@ This performs:
 
 ```
 parking_project_submission/
-├── configs/                    # default + sample configs (bilingual notes)
-├── gym_demo.py                 # CLI entry (manual/random modes)
-├── modules/                    # JSON helpers, workflows, networks
-├── parking_env/                # Gymnasium env, GUI tuner, config generator
-├── agent_learning.py           # placeholder for future PPO pipeline
-└── neural_network_demo.py      # Lidar+Residual+LSTM demo (forward/sample/onnx)
+├── configs/                    # Default + sample configs (bilingual notes)
+├── gym_demo.py                 # CLI entry (random/manual, --summary/--per-step)
+├── modules/
+│   ├── __init__.py
+│   ├── utils.py               # JSON helpers
+│   ├── workflow.py            # Demo runners + keyboard controller
+│   └── networks.py            # Lidar+Residual+LSTM backbone (this week’s focus)
+├── parking_env/
+│   ├── __init__.py
+│   ├── env.py                 # Environment (observations, rewards, rendering)
+│   ├── assist_model_tuner.py  # Qt/Matplotlib assist tuner (optional)
+│   └── generate_training_config.py # Randomized scene generator
+├── agent_learning.py          # PPO training stub (to be implemented)
+└── neural_network_demo.py     # NN demo (forward/sample/backward/ONNX)
 
-requirements.txt
-setup.py
-environment.yml
+scripts/
+├── quick_test.sh              # One-shot: NN + Gym checks (non-interactive)
+├── quick_test_nn.sh           # NN-only quick checks (T=1/T=8, optional ONNX)
+├── quick_test_gym.sh          # Gym-only quick checks
+├── setup_env.sh               # Create env + pip install -e .
+└── clean.sh                   # Clean caches + artifacts/*.onnx
+
+requirements.txt               # Core Python deps (CPU-only)
+setup.py                       # Packaging (editable install)
+environment.yml                # Optional conda/mamba wrapper
 ```
+
+Key files (focus this week):
+- `parking_project_submission/modules/networks.py`: Lidar+Residual+LSTM actor–critic.
+  - Encoders: base MLP (11→128, LayerNorm+ReLU) and lidar 1D-CNN (+GAP→FC→128).
+  - Fusion: `fusion_refiner` residual block (Linear→LN→ReLU→Linear + skip).
+  - Temporal: LSTM(256→128); heads for Gaussian policy (clamped log_std) and value.
+  - Helpers: `initial_state`, `split_flat_obs`; CPU-only.
+- `parking_project_submission/neural_network_demo.py`: Forward/sample/backward demo; flags `--seq-len`, `--export-onnx`.
+- `parking_project_submission/gym_demo.py`: Random/manual; `--summary` (manual one-line), `--per-step` (random per-step logs).
+- `parking_project_submission/parking_env/env.py`: Environment core (rays, dynamics, rewards, rendering overlays).
 
 ### Gym Demo Module
 
@@ -429,17 +454,42 @@ bash run_submission.sh
 
 ```
 parking_project_submission/
-├── configs/                    # 默认配置与示例场景（含双语注释）
-├── gym_demo.py                 # 命令行入口（随机 / 手动模式）
-├── modules/                    # JSON 工具、工作流、网络结构
-├── parking_env/                # 环境实现、调参 GUI、配置生成器
-├── agent_learning.py           # PPO 训练入口预留脚本
-└── neural_network_demo.py      # Lidar+Residual+LSTM 示例
+├── configs/                    # 默认/示例配置（含双语注释）
+├── gym_demo.py                 # 命令行入口（随机/手动，支持 --summary/--per-step）
+├── modules/
+│   ├── __init__.py
+│   ├── utils.py               # JSON 读写工具
+│   ├── workflow.py            # 演示运行器 + 键盘控制器
+│   └── networks.py            # Lidar+Residual+LSTM 主干（本周重点）
+├── parking_env/
+│   ├── __init__.py
+│   ├── env.py                 # 环境核心（观测/奖励/渲染）
+│   ├── assist_model_tuner.py  # 助力调参 GUI（可选）
+│   └── generate_training_config.py # 随机场景生成器
+├── agent_learning.py          # PPO 训练占位（待实现）
+└── neural_network_demo.py     # 神经网络示例（前向/采样/反传/ONNX）
 
-requirements.txt
-setup.py
-environment.yml
+scripts/
+├── quick_test.sh              # 一键自检：NN + Gym（非交互）
+├── quick_test_nn.sh           # 仅 NN 自检（T=1/T=8，可选导出 ONNX）
+├── quick_test_gym.sh          # 仅 Gym 自检
+├── setup_env.sh               # 创建环境 + pip install -e .
+└── clean.sh                   # 清理缓存 + artifacts/*.onnx
+
+requirements.txt               # 核心依赖（CPU 版本）
+setup.py                       # 包装配置（可编辑安装）
+environment.yml                # 可选的 conda/mamba 包装
 ```
+
+关键文件（本周重点）：
+- `parking_project_submission/modules/networks.py`：实现 Lidar+Residual+LSTM 架构。
+  - 编码器：基础特征 MLP（11→128，LayerNorm+ReLU）与 LiDAR 1D-CNN（+自适应池化→FC→128）。
+  - 融合：`fusion_refiner` 残差块（Linear→LN→ReLU→Linear，与残差相加）。
+  - 时序层：LSTM(256→128)，策略（高斯，log_std 有界）与价值头。
+  - 工具：`initial_state`、`split_flat_obs`；默认 CPU 运行。
+- `parking_project_submission/neural_network_demo.py`：前向/采样/反传演示；支持 `--seq-len`、`--export-onnx`。
+- `parking_project_submission/gym_demo.py`：随机/手动演示；`--summary`（手动仅摘要）、`--per-step`（随机逐步日志）。
+- `parking_project_submission/parking_env/env.py`：环境核心（激光射线、动力学、奖励、渲染叠层）。
 
 ### Gym 模块
 
