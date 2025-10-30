@@ -7,12 +7,8 @@
 from .workflow import DemoOptions, run_demo, run_manual_demo, run_random_demo
 from .utils import read_json, write_json
 from .networks import (
-    ActorCriticOutput,
-    RecurrentActorCritic,
     ActorCriticOutputLSTM,
     RecurrentActorCriticLidar,
-    ActorCriticOutputGRU,
-    RecurrentActorCriticLidarGRU,
 )
 
 __all__ = [
@@ -22,10 +18,6 @@ __all__ = [
 	"run_random_demo",
 	"read_json",
 	"write_json",
-	"ActorCriticOutput",
-    "RecurrentActorCritic",
-    "ActorCriticOutputLSTM",
+	"ActorCriticOutputLSTM",
     "RecurrentActorCriticLidar",
-    "ActorCriticOutputGRU",
-    "RecurrentActorCriticLidarGRU",
 ]

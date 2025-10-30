@@ -16,5 +16,8 @@ find . -type d -name "*.egg-info" -prune -exec rm -rf {} +
 echo "Cleaning build/dist caches..."
 rm -rf build dist .pytest_cache .mypy_cache .ruff_cache
 
-echo "Done."
+echo "Cleaning exported artifacts (e.g., ONNX models)..."
+rm -rf artifacts
+find . -type f -name "*.onnx" -delete || true
 
+echo "Done."

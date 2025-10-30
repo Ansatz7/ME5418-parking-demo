@@ -37,6 +37,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Suppress per-step logging for less verbose console output.",
     )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Manual mode: suppress per-step logs and print one-line episode summary.",
+    )
+    parser.add_argument(
+        "--per-step",
+        action="store_true",
+        help="Random mode: print per-step logs in addition to the final episode summary.",
+    )
     return parser.parse_args(argv)
 
 
@@ -50,6 +60,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         config_path=args.config,
         visualize=not args.no_visualize,
         verbose=not args.quiet,
+        summary=args.summary,
+        per_step=args.per_step,
     )
     run_demo(options)
 

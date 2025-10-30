@@ -34,6 +34,8 @@ class DemoOptions:
     config_path: Optional[Path] = None
     visualize: bool = True
     verbose: bool = True
+    summary: bool = False  # print one-line episode summary (manual mode)
+    per_step: bool = False  # print per-step logs (random mode)
 
 
 def build_base_config() -> Dict[str, Any]:
@@ -138,6 +140,14 @@ def run_random_demo(options: DemoOptions) -> None:
                     env.render()
                     if options.sleep_scale > 0.0:
                         time.sleep(env.dt * options.sleep_scale)
+                if options.per_step and options.verbose:
+                    print(
+                        f"[Random] Ep {episode + 1} Step {step + 1} "
+                        f"Reward {reward:.3f} Term {info['terminal_reason']} "
+                        f"Dist {info['distance_to_slot']:.2f} "
+                        f"Head {np.degrees(info['heading_error']):.1f} deg",
+                        flush=True,
+                    )
                 if terminated or truncated:
                     break
             if options.verbose:
@@ -171,7 +181,7 @@ def run_manual_demo(options: DemoOptions) -> None:
                 action = controller.action()
                 obs, reward, terminated, truncated, info = env.step(action)
                 env.render()
-                if options.verbose:
+                if options.verbose and not options.summary:
                     print(
                         f"Episode {episode + 1} Step {step + 1} "
                         f"Reward {reward:.3f} Termination {info['terminal_reason']} "
@@ -186,6 +196,13 @@ def run_manual_demo(options: DemoOptions) -> None:
                     break
             if not controller.running:
                 break
+            if options.summary and options.verbose:
+                print(
+                    f"[Manual] Episode {episode + 1} finished in {step} steps "
+                    f"termination {info['terminal_reason']} dist {info['distance_to_slot']:.2f} "
+                    f"heading {np.degrees(info['heading_error']):.1f} deg",
+                    flush=True,
+                )
     finally:
         env.close()
 

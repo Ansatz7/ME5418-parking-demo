@@ -52,6 +52,70 @@ mamba deactivate
 
 *All commands also work if you substitute `mamba` with `conda`. The new dependency list includes `PyQt5`, so the GUI tuner works out of the box.*
 
+#### Neural Network Quick Check (this week’s focus)
+
+- For full details (architecture, export and visualization), see:
+  [Neural Network Module](#neural-network-module)
+
+- Single step (T=1):
+
+  ```bash
+  python -m parking_project_submission.neural_network_demo
+  ```
+
+- Longer sequence (e.g., T=8):
+
+  ```bash
+  python -m parking_project_submission.neural_network_demo --seq-len 8
+  ```
+
+- Optional ONNX export for Netron (install onnx first: `pip install onnx`):
+
+  ```bash
+  python -m parking_project_submission.neural_network_demo --export-onnx artifacts/model_lstm.onnx
+  ```
+
+- One-shot NN smoke tests script:
+
+  ```bash
+  bash scripts/quick_test_nn.sh
+  ```
+
+- Optional tools for visualization/summaries (install on demand):
+
+  ```bash
+  python -m pip install onnx onnxsim netron torchinfo
+  ```
+
+#### Gym Quick Check
+
+- Headless random rollout (per-step logs with `--per-step`):
+
+  ```bash
+  parking-gym-demo --mode random --episodes 1 --max-steps 400 --no-visualize --per-step
+  ```
+
+- Manual mode (keyboard). Use `--summary` for a one-line episode summary (no per-step logs):
+
+  ```bash
+  parking-gym-demo --mode manual --episodes 1 --max-steps 400 --summary
+  ```
+
+- Generate randomized config and visualize:
+
+  ```bash
+  python -m parking_project_submission.parking_env.generate_training_config \
+    --out parking_project_submission/configs/train_quick.json --seed 123
+  parking-gym-demo --mode random --episodes 1 --max-steps 200 \
+    --config parking_project_submission/configs/train_quick.json
+  ```
+
+- One-shot Gym smoke tests script:
+
+  ```bash
+  bash scripts/quick_test_gym.sh
+  ```
+
 #### One-Command Evaluation
 
 For grading, just run the single entry file without any arguments:
@@ -60,7 +124,9 @@ For grading, just run the single entry file without any arguments:
 bash run_submission.sh
 ```
 
-This performs a short, headless rollout using the default configuration.
+This performs:
+- A short, headless environment rollout (default config), and
+- A short neural-network smoke test (Lidar+Residual+LSTM, sequence T=4).
 
 #### Helper Scripts
 
@@ -70,11 +136,14 @@ This performs a short, headless rollout using the default configuration.
   bash scripts/setup_env.sh
   ```
 
-- Run non-interactive smoke tests (random rollout + randomized-config test):
+- Run non-interactive smoke tests (both NN and Gym):
 
   ```bash
   bash scripts/quick_test.sh
   ```
+
+  This runs Gym quick checks, two neural-network demos (T=1 and T=8), and
+  optionally exports an ONNX model if the `onnx` package is installed.
 
 - Clean build metadata and caches (optional):
 
@@ -91,7 +160,7 @@ parking_project_submission/
 ├── modules/                    # JSON helpers, workflows, networks
 ├── parking_env/                # Gymnasium env, GUI tuner, config generator
 ├── agent_learning.py           # placeholder for future PPO pipeline
-└── neural_network_demo.py      # GRU actor-critic demo
+└── neural_network_demo.py      # Lidar+Residual+LSTM demo (forward/sample/onnx)
 
 requirements.txt
 setup.py
@@ -103,6 +172,9 @@ environment.yml
 - Create a fresh environment (Method A or B) and run `pip install -e .`.
 - Execute `parking-gym-demo --mode random` and `--mode manual` to verify rendering & logging.
 - Launch the config generator and assist tuner (see [Gym Demo Module](#gym-demo-module)) to confirm read/write access.
+- Run the neural-network demo to validate the architecture:
+  - `python -m parking_project_submission.neural_network_demo --seq-len 1`
+  - `python -m parking_project_submission.neural_network_demo --seq-len 8`
 - Render this README and ensure every command works as documented.
 
 ### Gym Demo Module
@@ -155,32 +227,53 @@ Outputs include randomized spawn regions, slot placement, and obstacle layouts.
 ### Neural Network Module
 
 - **Location:** `parking_project_submission/modules/networks.py`, `parking_project_submission/neural_network_demo.py`
-- **Backbones:** Two temporal cores with the same input encoders (base 11-dim via MLP, lidar N beams via 1D-CNN + GAP → 128). Choose one:
-  - GRU: `RecurrentActorCriticLidarGRU` (faster, single hidden state h)
-  - LSTM: `RecurrentActorCriticLidar` (richer memory, hidden (h, c))
-- **Inputs:** split observation into `[B, T, 11]` base features and `[B, T, N]` lidar distances (N equals number of rays; adaptive pooling supports variable N).
-- **Outputs:** Gaussian policy N(μ, σ) with learned log_std (clamped) and value V(s).
+- **Backbone:** Lidar+Residual+LSTM
+  - Inputs: split observation into `[B, T, 11]` base features (MLP→128) and `[B, T, N]` lidar distances (1D-CNN+GAP→FC→128)
+  - Fusion: concat → residual refiner (Linear→LN→ReLU→Linear + skip)
+  - Temporal core: LSTM(hidden=128) → policy/value heads
+- **Outputs:** Gaussian policy N(μ, σ) with clamped log_std and value V(s).
 
 CLI usage (no training; forward, sample, toy loss, backward):
 
 ```bash
-# default: GRU, T=1, CPU
+# default: T=1, CPU
 python -m parking_project_submission.neural_network_demo
 
-# LSTM backbone, custom sequence length
-python -m parking_project_submission.neural_network_demo --arch lstm --seq-len 8
-
-# use GPU when available
-python -m parking_project_submission.neural_network_demo --device cuda --arch gru --seq-len 8
+# custom sequence length
+python -m parking_project_submission.neural_network_demo --seq-len 8
 
 # optional: export ONNX for Netron (install onnx first: pip install onnx)
-python -m parking_project_submission.neural_network_demo --arch gru  --export-onnx artifacts/model_gru.onnx
-python -m parking_project_submission.neural_network_demo --arch lstm --export-onnx artifacts/model_lstm.onnx
+python -m parking_project_submission.neural_network_demo --export-onnx artifacts/model_lstm.onnx
 ```
 
 Optional helpers: `pip install onnx` for export, `pip install netron` to view `.onnx`, `pip install torchinfo` for richer summaries.
 
+Note: This submission runs entirely on CPU to maximize portability across machines. GPU instructions and flags are intentionally omitted; a GPU-enabled variant will be provided later.
+
 - **Next steps:** Integrate PPO training loop (clip loss, value loss, entropy), GAE advantages, optimizer schedule and masks for variable-length sequences.
+
+#### Model Visualization (ONNX + Netron)
+
+- Export ONNX from the demo (already supported by `--export-onnx`):
+
+  ```bash
+  python -m parking_project_submission.neural_network_demo \
+    --seq-len 4 --export-onnx artifacts/model_lstm.onnx
+  ```
+
+- Simplify the graph for cleaner visualization (optional):
+
+  ```bash
+  python -m pip install onnx onnxsim
+  python -m onnxsim artifacts/model_lstm.onnx artifacts/model_lstm_simple.onnx
+  ```
+
+- Visualize in Netron:
+
+  - Website: https://netron.app (drag-and-drop `artifacts/model_lstm_simple.onnx`)
+  - Local app (optional): `pip install netron && netron artifacts/model_lstm_simple.onnx`
+
+Tips: using a fixed small sequence length (e.g., `--seq-len 1`) reduces dynamic-shape nodes; running `onnxsim` further folds shape ops for a shorter graph.
 
 ### Agent Learning Module
 
@@ -242,6 +335,70 @@ mamba deactivate
 
 *依赖列表已包含 `PyQt5`，助力调参 GUI 默认可用；若只使用命令行，也可自行改为精简安装。*
 
+#### 神经网络快速验证（本周重点）
+
+- 需要更完整的设计、导出与可视化说明，请查看：
+  [神经网络模块](#神经网络模块)
+
+- 单步（T=1）：
+
+  ```bash
+  python -m parking_project_submission.neural_network_demo
+  ```
+
+- 多步序列（例如 T=8）：
+
+  ```bash
+  python -m parking_project_submission.neural_network_demo --seq-len 8
+  ```
+
+- 可选导出 ONNX 供 Netron 可视化（先安装 onnx：`pip install onnx`）：
+
+  ```bash
+  python -m parking_project_submission.neural_network_demo --export-onnx artifacts/model_lstm.onnx
+  ```
+
+- 一键 NN 自检脚本：
+
+  ```bash
+  bash scripts/quick_test_nn.sh
+  ```
+
+- 可选工具（按需安装，用于可视化/结构摘要）：
+
+  ```bash
+  python -m pip install onnx onnxsim netron torchinfo
+  ```
+
+#### Gym 快速验证
+
+- 无界面随机回放（需要逐步日志可加 `--per-step`）：
+
+  ```bash
+  parking-gym-demo --mode random --episodes 1 --max-steps 400 --no-visualize --per-step
+  ```
+
+- 手动模式（键盘）。若只需回合摘要（不打印逐步日志），可加 `--summary`：
+
+  ```bash
+  parking-gym-demo --mode manual --episodes 1 --max-steps 400 --summary
+  ```
+
+- 随机可视化：
+
+  ```bash
+  python -m parking_project_submission.parking_env.generate_training_config \
+    --out parking_project_submission/configs/train_quick.json --seed 123
+  parking-gym-demo --mode random --episodes 1 --max-steps 200 \
+    --config parking_project_submission/configs/train_quick.json
+  ```
+
+- 一键 Gym 自检脚本：
+
+  ```bash
+  bash scripts/quick_test_gym.sh
+  ```
+
 #### 一键评测（无参数）
 
 评测时，只需运行一个入口脚本，无需任何参数：
@@ -250,7 +407,9 @@ mamba deactivate
 bash run_submission.sh
 ```
 
-此脚本会使用默认配置执行一段短程、无可视化的随机策略回放，满足“一个文件、一键运行”的评测要求。
+此脚本会执行：
+- 使用默认配置的一段短程、无可视化环境回放；
+- 一次简短的神经网络冒烟测试（Lidar+Residual+LSTM，序列长度 T=4）。
 
 #### 辅助脚本
 
@@ -281,7 +440,7 @@ parking_project_submission/
 ├── modules/                    # JSON 工具、工作流、网络结构
 ├── parking_env/                # 环境实现、调参 GUI、配置生成器
 ├── agent_learning.py           # PPO 训练入口预留脚本
-└── neural_network_demo.py      # GRU Actor-Critic 示例
+└── neural_network_demo.py      # Lidar+Residual+LSTM 示例
 
 requirements.txt
 setup.py
@@ -293,6 +452,9 @@ environment.yml
 - 按上述步骤在全新环境中完成安装。
 - 分别运行 `parking-gym-demo --mode random` 与 `--mode manual` 确认渲染、日志无误。
 - 根据 [Gym 模块](#gym-模块) 的说明尝试调参 GUI 与随机地图生成器。
+- 运行神经网络演示，验证结构正确：
+  - `python -m parking_project_submission.neural_network_demo --seq-len 1`
+  - `python -m parking_project_submission.neural_network_demo --seq-len 8`
 - 渲染 README，逐条核对命令、参数说明与实际表现是否一致。
 
 ### Gym 模块
@@ -345,32 +507,53 @@ python -m parking_project_submission.parking_env.generate_training_config \
 ### 神经网络模块
 
 - **关键文件：** `parking_project_submission/modules/networks.py`、`parking_project_submission/neural_network_demo.py`
-- **两种时序骨干（共享输入编码：基础 11 维经 MLP、LiDAR N 束经 1D-CNN+自适应池化 后各到 128 维，再融合）：**
-  - GRU：`RecurrentActorCriticLidarGRU`（更轻、更快，只有 h）
-  - LSTM：`RecurrentActorCriticLidar`（记忆力更强，(h, c)）
-- **输入形状：** 将观测拆成 `[B, T, 11]` 基础特征 与 `[B, T, N]` LiDAR 距离（N 为射线束数，自适应池化支持可变 N）。
+- **时序骨干：** Lidar+Residual+LSTM
+  - 输入：将观测拆成 `[B, T, 11]` 基础特征（MLP→128）与 `[B, T, N]` LiDAR 距离（1D-CNN+自适应池化→FC→128）
+  - 融合：concat → 残差精炼块（Linear→LN→ReLU→Linear 与残差相加）
+  - 时序层：LSTM(hidden=128) → 策略/价值头
 - **输出：** 高斯策略 N(μ, σ)（log_std 有界）与状态值 V(s)。
 
 命令行用法（不训练，仅前向、采样、玩具损失、反向）：
 
 ```bash
-# 默认：GRU，T=1，CPU
+# 默认：T=1，CPU
 python -m parking_project_submission.neural_network_demo
 
-# 指定 LSTM 与序列长度
-python -m parking_project_submission.neural_network_demo --arch lstm --seq-len 8
-
-# 使用 GPU（若可用）
-python -m parking_project_submission.neural_network_demo --device cuda --arch gru --seq-len 8
+# 指定序列长度
+python -m parking_project_submission.neural_network_demo --seq-len 8
 
 # 可选：导出 ONNX（先安装 onnx：pip install onnx）
-python -m parking_project_submission.neural_network_demo --arch gru  --export-onnx artifacts/model_gru.onnx
-python -m parking_project_submission.neural_network_demo --arch lstm --export-onnx artifacts/model_lstm.onnx
+python -m parking_project_submission.neural_network_demo --export-onnx artifacts/model_lstm.onnx
 ```
 
 可选工具：`pip install onnx` 导出、`pip install netron` 浏览 `.onnx`、`pip install torchinfo` 打印更详细结构摘要。
 
+说明：当前提交版仅使用 CPU 运行，最大化跨机器的可复现性；GPU 参数与说明已暂时移除，后续会提供 GPU 适配版本。
+
 - **后续计划：** 集成 PPO（clip/value/entropy）、GAE 优势、优化器与变长序列 mask 等，完成训练部分后更新本节说明。
+
+#### 模型可视化（ONNX + Netron）
+
+- 从演示脚本导出 ONNX（已内置开关）：
+
+  ```bash
+  python -m parking_project_submission.neural_network_demo \
+    --seq-len 4 --export-onnx artifacts/model_lstm.onnx
+  ```
+
+- 简化计算图（可选，使图更短更清晰）：
+
+  ```bash
+  python -m pip install onnx onnxsim
+  python -m onnxsim artifacts/model_lstm.onnx artifacts/model_lstm_simple.onnx
+  ```
+
+- 在 Netron 中打开：
+
+  - 网页版：https://netron.app （拖入 `artifacts/model_lstm_simple.onnx`）
+  - 本地应用（可选）：`pip install netron && netron artifacts/model_lstm_simple.onnx`
+
+提示：导出时使用较小的序列（如 `--seq-len 1`）可减少动态形状节点；`onnxsim` 会折叠形状相关算子，得到更紧凑的示意图。
 
 ### Agent Learning 模块
 

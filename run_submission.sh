@@ -10,5 +10,10 @@ parking-gym-demo --mode random --episodes 1 --max-steps 400 --no-visualize --qui
   exit 1
 }
 
-echo "Done."
+echo "Neural Network Demo: Lidar+Residual+LSTM (short sequence)"
+python -m parking_project_submission.neural_network_demo --seq-len 4 || {
+  echo "Neural network demo failed." >&2
+  exit 1
+}
 
+echo "Done."
