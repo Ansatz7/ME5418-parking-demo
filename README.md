@@ -2,13 +2,11 @@
 
 **English** | [中文](#中文指南)
 
-Project homepage (GitHub): https://github.com/Ansatz7/ME5418-parking-demo
-
 Note: Compared to earlier submissions, this repository has been refactored to make running, testing, and evaluation simpler (clear Quick Start, one‑command evaluation, and split NN/Gym checks).
 
 ## English Guide
 
-This repository packages the self-contained parking environment used for coursework demos. Below is a quick navigation list; feel free to jump straight to the section you need.
+[This repository](https://github.com/Ansatz7/ME5418-parking-demo) packages the self-contained parking environment used for coursework demos. Below is a quick navigation list; feel free to jump straight to the section you need.
 
 ### Table of Contents
 
@@ -281,11 +279,9 @@ Tips: using a fixed small sequence length (e.g., `--seq-len 1`) reduces dynamic-
 
 [English](#english-guide) | **中文**
 
-项目主页（GitHub）：https://github.com/Ansatz7/ME5418-parking-demo
-
 说明：相较此前提交版本，本仓库已做结构性重构，重点优化了运行与评估流程（更清晰的 Quick Start、单文件一键评测、NN/Gym 分离验证等）。
 
-本仓库为智能泊车演示项目的独立提交包，下面提供快速导航，方便直接跳到所需章节。
+[本仓库](https://github.com/Ansatz7/ME5418-parking-demo)为智能泊车演示项目的独立提交包，下面提供快速导航，方便直接跳到所需章节。
 
 ### 目录
 
