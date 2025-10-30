@@ -4,9 +4,9 @@ set -euo pipefail
 # Single entrypoint for evaluation. No arguments required.
 # Runs a short headless rollout using the default demo configuration.
 
-echo "Parking Environment Demo: evaluation run"
-parking-gym-demo --mode random --episodes 1 --max-steps 400 --no-visualize --quiet || {
-  echo "Evaluation run failed." >&2
+echo "Parking Environment Demo: evaluation run (visualized random rollout)"
+parking-gym-demo --mode random --episodes 1 --max-steps 400 --per-step || {
+  echo "Evaluation run (GYM) failed." >&2
   exit 1
 }
 

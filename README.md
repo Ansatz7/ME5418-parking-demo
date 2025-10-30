@@ -2,6 +2,10 @@
 
 **English** | [中文](#中文指南)
 
+Project homepage (GitHub): https://github.com/Ansatz7/ME5418-parking-demo
+
+Note: Compared to earlier submissions, this repository has been refactored to make running, testing, and evaluation simpler (clear Quick Start, one‑command evaluation, and split NN/Gym checks).
+
 ## English Guide
 
 This repository packages the self-contained parking environment used for coursework demos. Below is a quick navigation list; feel free to jump straight to the section you need.
@@ -15,7 +19,7 @@ This repository packages the self-contained parking environment used for coursew
 
 ### Quick Start
 
-The default workflow uses `pip install -e .` so graders can get the demo running in minutes. An optional `environment.yml` is provided for those who prefer Conda/Mamba.
+The default workflow uses `pip install -e .` so users can get the demo running in minutes. An optional `environment.yml` is provided for those who prefer Conda/Mamba.
 
 #### Environment Setup
 
@@ -118,15 +122,15 @@ mamba deactivate
 
 #### One-Command Evaluation
 
-For grading, just run the single entry file without any arguments:
+For a quick evaluation, just run the single entry file without any arguments:
 
 ```bash
 bash run_submission.sh
 ```
 
 This performs:
-- A short, headless environment rollout (default config), and
-- A short neural-network smoke test (Lidar+Residual+LSTM, sequence T=4).
+- A short, visualized random environment rollout with per-step logging; and
+- A short neural-network demo (Lidar+Residual+LSTM, sequence T=4).
 
 #### Helper Scripts
 
@@ -166,16 +170,6 @@ requirements.txt
 setup.py
 environment.yml
 ```
-
-#### Submission Checklist
-
-- Create a fresh environment (Method A or B) and run `pip install -e .`.
-- Execute `parking-gym-demo --mode random` and `--mode manual` to verify rendering & logging.
-- Launch the config generator and assist tuner (see [Gym Demo Module](#gym-demo-module)) to confirm read/write access.
-- Run the neural-network demo to validate the architecture:
-  - `python -m parking_project_submission.neural_network_demo --seq-len 1`
-  - `python -m parking_project_submission.neural_network_demo --seq-len 8`
-- Render this README and ensure every command works as documented.
 
 ### Gym Demo Module
 
@@ -287,6 +281,10 @@ Tips: using a fixed small sequence length (e.g., `--seq-len 1`) reduces dynamic-
 
 [English](#english-guide) | **中文**
 
+项目主页（GitHub）：https://github.com/Ansatz7/ME5418-parking-demo
+
+说明：相较此前提交版本，本仓库已做结构性重构，重点优化了运行与评估流程（更清晰的 Quick Start、单文件一键评测、NN/Gym 分离验证等）。
+
 本仓库为智能泊车演示项目的独立提交包，下面提供快速导航，方便直接跳到所需章节。
 
 ### 目录
@@ -298,7 +296,7 @@ Tips: using a fixed small sequence length (e.g., `--seq-len 1`) reduces dynamic-
 
 ### 快速上手
 
-推荐采用 `pip install -e .`，保证助教或阅卷人几分钟内即可运行。若偏好 Conda/Mamba，也提供 `environment.yml`。
+推荐采用 `pip install -e .`，保证使用者或读者几分钟内即可运行。若偏好 Conda/Mamba，也提供 `environment.yml`。
 
 #### 环境搭建
 
@@ -408,8 +406,8 @@ bash run_submission.sh
 ```
 
 此脚本会执行：
-- 使用默认配置的一段短程、无可视化环境回放；
-- 一次简短的神经网络冒烟测试（Lidar+Residual+LSTM，序列长度 T=4）。
+- 一段短程、带可视化的随机环境回放（逐步打印）；
+- 一次简短的神经网络演示（Lidar+Residual+LSTM，序列长度 T=4）。
 
 #### 辅助脚本
 
@@ -446,16 +444,6 @@ requirements.txt
 setup.py
 environment.yml
 ```
-
-#### 提交前自检
-
-- 按上述步骤在全新环境中完成安装。
-- 分别运行 `parking-gym-demo --mode random` 与 `--mode manual` 确认渲染、日志无误。
-- 根据 [Gym 模块](#gym-模块) 的说明尝试调参 GUI 与随机地图生成器。
-- 运行神经网络演示，验证结构正确：
-  - `python -m parking_project_submission.neural_network_demo --seq-len 1`
-  - `python -m parking_project_submission.neural_network_demo --seq-len 8`
-- 渲染 README，逐条核对命令、参数说明与实际表现是否一致。
 
 ### Gym 模块
 
