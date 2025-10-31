@@ -21,10 +21,20 @@ The default workflow uses `pip install -e .` so users can get the demo running i
 
 #### Environment Setup
 
+Before you begin
+- Open a terminal and cd into the project root (this repository folder; typically `ME5418-parking-demo` if cloned from GitHub):
+  - Linux (Ubuntu 22.04 example): `cd /path/to/ME5418-parking-demo`
+- Commands below are shown for Bash on Linux.
+- Prefer Mamba for speed; if you like Conda, skip installing Mamba and replace every `mamba` command with `conda`.
+
 **Method A (recommended): pip install -e .**
 
 ```bash
-# Make sure mamba is installed and initialized
+# Choose one package manager
+# - If using Mamba (recommended): ensure installed and initialized, then use `mamba ...` below
+# - If you prefer Conda: skip installing Mamba and replace `mamba` with `conda` in all commands
+
+# (Mamba-only) Ensure mamba is installed and shell-initialized
 conda install -n base -c conda-forge mamba -y
 eval "$(mamba shell hook --shell bash)"
 
@@ -35,20 +45,24 @@ mamba activate parking-rl
 # Install the package in editable mode
 pip install -e .
 
-# Run smoke tests
+# Run smoke tests (keep env active afterward for more tests)
 echo "Running random demo..."
 parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
 echo "Running manual demo (close window to finish)..."
 parking-gym-demo --mode manual --episodes 1 --max-steps 400
 
-# Deactivate when finished
-mamba deactivate
+# Leave the environment active for further experiments.
+# When completely done, deactivate with:  mamba deactivate   (or: conda deactivate)
 ```
 
-**Method B: environment.yml + Mamba**
+**Method B: environment.yml (Mamba or Conda)**
 
 ```bash
-# Make sure mamba is installed and initialized
+# Choose one package manager
+# - Mamba (recommended): ensure installed/initialized
+# - Conda: replace `mamba` with `conda` in the commands below
+
+# (Mamba-only) Ensure mamba is installed and shell-initialized
 conda install -n base -c conda-forge mamba -y
 eval "$(mamba shell hook --shell bash)"
 
@@ -56,29 +70,16 @@ eval "$(mamba shell hook --shell bash)"
 mamba env create -f environment.yml
 mamba activate parking-rl
 
-# Test installation
+# Test installation (keep env active for more tests)
 parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
 
-# Deactivate when finished
-mamba deactivate
+# Deactivate later when completely done:
+# mamba deactivate   (or: conda deactivate)
 ```
 
-**Method B: environment.yml + Mamba**
+<!-- removed duplicate Method B block to avoid confusion -->
 
-```bash
-# Initialize mamba shell integration (only needed once)
-eval "$(mamba shell hook --shell bash)"
-
-# Create environment from yml file  
-mamba env create -f environment.yml
-mamba activate parking-rl
-
-# Test installation
-parking-gym-demo --mode random --episodes 1 --max-steps 400
-mamba deactivate
-```
-
-*All commands also work if you substitute `mamba` with `conda`. The new dependency list includes `PyQt5`, so the GUI tuner works out of the box.*
+*All commands also work if you substitute `mamba` with `conda`. The dependency list includes `PyQt5`, so the GUI tuner works out of the box.*
 
 #### Neural Network Quick Check (this week’s focus)
 
@@ -347,10 +348,20 @@ Tips: using a fixed small sequence length (e.g., `--seq-len 1`) reduces dynamic-
 
 #### 环境搭建
 
+开始之前
+- 打开终端并切换到项目根目录（本仓库文件夹；若从 GitHub 克隆，默认目录名为 `ME5418-parking-demo`）：
+  - Linux（Ubuntu 22.04 示例）：`cd /path/to/ME5418-parking-demo`
+- 下方命令以 Linux 的 Bash 为例。
+- 推荐使用 Mamba；若更习惯 Conda，可跳过安装 Mamba，并把所有 `mamba` 命令替换为 `conda`。
+
 **方法 A (推荐): pip install -e .**
 
 ```bash
-# 确保 mamba 已安装并初始化
+# 选择一个包管理器
+# - 若使用 Mamba（推荐）：确保已安装并初始化；下文使用 `mamba ...`
+# - 若偏好 Conda：可跳过安装 Mamba，把命令中的 `mamba` 全部改为 `conda`
+
+# （仅 Mamba）确保 mamba 已安装并完成 shell 初始化
 conda install -n base -c conda-forge mamba -y
 eval "$(mamba shell hook --shell bash)"
 
@@ -361,20 +372,24 @@ mamba activate parking-rl
 # 以可编辑模式安装本包
 pip install -e .
 
-# 运行冒烟测试
+# 运行冒烟测试（后续还要继续测试，环境不要退出）
 echo "正在运行随机策略演示..."
 parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
 echo "正在运行手动模式演示 (关闭窗口后结束)..."
 parking-gym-demo --mode manual --episodes 1 --max-steps 400
 
-# 完成后退出环境
-mamba deactivate
+# 冒烟后请保持环境激活，便于继续验证。
+# 若完全结束所有工作再退出：mamba deactivate（或：conda deactivate）
 ```
 
-**方法 B: environment.yml + Mamba**
+**方法 B: environment.yml（Mamba 或 Conda）**
 
 ```bash
-# 确保 mamba 已安装并初始化
+# 选择一个包管理器
+# - Mamba（推荐）：确保已安装并完成初始化
+# - Conda：将下方命令中的 `mamba` 替换为 `conda`
+
+# （仅 Mamba）确保 mamba 已安装并完成 shell 初始化
 conda install -n base -c conda-forge mamba -y
 eval "$(mamba shell hook --shell bash)"
 
@@ -382,27 +397,14 @@ eval "$(mamba shell hook --shell bash)"
 mamba env create -f environment.yml
 mamba activate parking-rl
 
-# 测试安装
+# 测试安装（保持环境激活，方便继续调试）
 parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
 
-# 完成后退出环境
-mamba deactivate
+# 完全结束后再退出：
+# mamba deactivate（或：conda deactivate）
 ```
 
-**方法 B: environment.yml + Mamba**
-
-```bash
-# 初始化 mamba shell 集成（仅需执行一次）
-eval "$(mamba shell hook --shell bash)"
-
-# 从 yml 文件创建环境  
-mamba env create -f environment.yml
-mamba activate parking-rl
-
-# 测试安装
-parking-gym-demo --mode random --episodes 1 --max-steps 400
-mamba deactivate
-```
+<!-- 删除重复的 方法 B 小节以避免歧义 -->
 
 *依赖列表已包含 `PyQt5`，助力调参 GUI 默认可用；若只使用命令行，也可自行改为精简安装。*
 
