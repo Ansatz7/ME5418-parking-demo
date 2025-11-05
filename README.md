@@ -81,7 +81,21 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
 
 *All commands also work if you substitute `mamba` with `conda`. The dependency list includes `PyQt5`, so the GUI tuner works out of the box.*
 
-#### Neural Network Quick Check (this week’s focus)
+#### Learning Agent Quick Start (this week’s focus)
+
+- Minimal PPO training (stateless, T=1; CPU-only):
+
+  ```bash
+  python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048
+  ```
+
+- Evaluate a saved checkpoint (uses policy mean, deterministic):
+
+  ```bash
+  python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_minimal.pt --eval-episodes 5
+  ```
+
+#### Neural Network Quick Check
 
 - For full details (architecture, export and visualization), see:
   [Neural Network Module](#neural-network-module)
@@ -196,7 +210,7 @@ parking_project_submission/
 │   ├── env.py                 # Environment (observations, rewards, rendering)
 │   ├── assist_model_tuner.py  # Qt/Matplotlib assist tuner (optional)
 │   └── generate_training_config.py # Randomized scene generator
-├── agent_learning.py          # PPO training stub (to be implemented)
+├── agent_learning.py          # Minimal PPO trainer (stateless T=1)
 └── neural_network_demo.py     # NN demo (forward/sample/backward/ONNX)
 
 scripts/
@@ -322,7 +336,7 @@ Tips: using a fixed small sequence length (e.g., `--seq-len 1`) reduces dynamic-
 ### Agent Learning Module
 
 - **Location:** `parking_project_submission/agent_learning.py`
-- **Current status:** CLI stub outlining the planned PPO workflow (argument parsing, placeholders).
+- **Current status:** Minimal PPO training loop implemented (stateless T=1). Next: recurrent PPO with sequence buffers, GAE masks, and truncated BPTT.
 - **Roadmap:** Next iteration will replace the stub with the actual training routine, tests, and logging hooks. Documentation will be updated alongside that release.
 
 ---
@@ -408,7 +422,21 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
 
 *依赖列表已包含 `PyQt5`，助力调参 GUI 默认可用；若只使用命令行，也可自行改为精简安装。*
 
-#### 神经网络快速验证（本周重点）
+#### Learning Agent 快速上手（本周重点）
+
+- 最小 PPO 训练（忽略时序记忆，T=1；仅 CPU）：
+
+  ```bash
+  python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048
+  ```
+
+- 评测已保存的模型（用策略均值，确定性）：
+
+  ```bash
+  python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_minimal.pt --eval-episodes 5
+  ```
+
+#### 神经网络快速验证
 
 - 需要更完整的设计、导出与可视化说明，请查看：
   [神经网络模块](#神经网络模块)
@@ -520,7 +548,7 @@ parking_project_submission/
 │   ├── env.py                 # 环境核心（观测/奖励/渲染）
 │   ├── assist_model_tuner.py  # 助力调参 GUI（可选）
 │   └── generate_training_config.py # 随机场景生成器
-├── agent_learning.py          # PPO 训练占位（待实现）
+├── agent_learning.py          # 最小 PPO 训练器（T=1，忽略记忆）
 └── neural_network_demo.py     # 神经网络示例（前向/采样/反传/ONNX）
 
 scripts/
@@ -646,7 +674,7 @@ python -m parking_project_submission.neural_network_demo --export-onnx artifacts
 ### Agent Learning 模块
 
 - **文件：** `parking_project_submission/agent_learning.py`
-- **当前状态：** 训练入口的 CLI 占位脚本，仅校验参数并输出计划流程。
-- **下一步：** 替换为真实的 PPO 训练循环，加入日志与测试后将完善本章节说明。
+- **当前状态：** 已实现最小 PPO 训练循环（T=1，忽略 LSTM 记忆，CPU）。
+- **下一步：** 升级为“时序版” PPO（带序列缓存、GAE mask、truncated BPTT），完善日志/评测与 README 说明。
 
 祝调参顺利，泊车顺滑！ 🚗
