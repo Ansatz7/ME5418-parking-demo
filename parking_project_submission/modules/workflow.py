@@ -232,7 +232,7 @@ def run_policy_demo(options: DemoOptions) -> None:
 
     ckpt = options.policy_checkpoint
     if ckpt is None:
-        ckpt = Path("artifacts/ppo_minimal.pt")
+        ckpt = Path("artifacts/ppo_agent.pt")
 
     env = ParkingEnv(config=resolve_config(options.config_path))
     try:
@@ -263,14 +263,20 @@ def run_policy_demo(options: DemoOptions) -> None:
                 obs, info = env.reset()
                 if options.visualize:
                     env.render()
+            # Initialize LSTM memory per-episode / 每个回合初始化 LSTM 记忆
+            h, c = model.initial_state(batch_size=1, device=torch.device("cpu"))
             total_reward = 0.0
             for step in range(options.max_steps):
                 with torch.no_grad():
-                    out = model.forward_from_flat_obs(torch.tensor(obs, dtype=torch.float32).unsqueeze(0))
+                    out = model.forward_from_flat_obs(
+                        torch.tensor(obs, dtype=torch.float32).unsqueeze(0), (h, c)
+                    )
                     if options.stochastic:
                         action = out.action_dist.sample()[0, -1].numpy()
                     else:
                         action = out.action_dist.mean[0, -1].numpy()
+                    # Carry memory / 传递记忆
+                    h, c = out.next_state
                 obs, reward, terminated, truncated, info = env.step(action)
                 total_reward += reward
                 if options.visualize:
@@ -295,6 +301,8 @@ def run_policy_demo(options: DemoOptions) -> None:
                         flush=True,
                     )
                 if terminated or truncated:
+                    # Reset memory together with environment / 回合结束一并重置记忆
+                    h, c = model.initial_state(batch_size=1, device=torch.device("cpu"))
                     break
             if options.verbose:
                 print(

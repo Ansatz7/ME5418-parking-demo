@@ -50,7 +50,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint",
         type=Path,
-        help="Policy mode: path to model checkpoint (defaults to artifacts/ppo_minimal.pt)",
+        help="Policy mode: path to model checkpoint (defaults to artifacts/ppo_agent.pt)",
     )
     parser.add_argument(
         "--stochastic",
