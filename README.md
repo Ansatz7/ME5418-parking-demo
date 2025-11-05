@@ -269,7 +269,7 @@ This section covers everything related to the parking environment and its suppor
 - **Implementation:** `parking_project_submission/parking_env/env.py`
 - **Observation space:** 11 core vehicle features (pose, velocity, steering) plus lidar ranges (`ray_angles`) for a total of `obs_dim` entries. Gaussian noise can be toggled at runtime.
 - **Action space:** 2D continuous vector `[longitudinal_accel, steering_accel]`, clipped to the vehicle limits.
-- **Reward shaping:** Distance, heading, velocity, smoothness, step cost, collision penalty, and success bonus. Termination occurs on success, collision, boundary exit, or timeout.
+- **Reward shaping:** Progress-based distance and heading (delta rewards, positive when getting closer/better oriented), plus velocity penalty, smoothness penalty, step cost, collision penalty, and success bonus. Termination occurs on success, collision, boundary exit, or timeout.
 - **Rendering:** Matplotlib overlays vehicle pose, ray distances, last action, and per-term reward breakdown.
 
 Run the CLI demo via:
@@ -645,7 +645,7 @@ environment.yml                # 可选的 conda/mamba 包装
 - **实现路径：** `parking_project_submission/parking_env/env.py`
 - **观测空间：** 车辆姿态、速度、转向等 11 个核心特征，加上若干激光雷达距离，默认叠加可配置高斯噪声。
 - **动作空间：** 连续动作 `[纵向加速度, 转向加速度]`，根据车辆极限自动裁剪。
-- **奖励设计：** 距离、朝向、速度、平滑度、时间步成本、碰撞惩罚、成功奖励；成功 / 碰撞 / 越界 / 超时触发终止。
+- **奖励设计：** 距离与朝向采用“增量奖励”（进展为正：更接近/更对准得到正分），同时包含速度惩罚、平滑度惩罚、时间步成本、碰撞惩罚与成功奖励；成功 / 碰撞 / 越界 / 超时触发终止。
 - **渲染信息：** Matplotlib 视图显示车辆姿态、雷达读数、上一动作、奖励拆分等。
 
 命令行示例：

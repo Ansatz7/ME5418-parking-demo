@@ -264,6 +264,11 @@ class ParkingEnv(gym.Env):
         self.last_action = np.zeros(2, dtype=float)
         self.last_reward = 0.0
         self.last_reward_terms = {}
+        # Initialize delta-reward memory so step() can compute progress-based rewards
+        # 初始化“增量奖励”的记忆（上一时刻的距离与朝向误差），用于奖励进展而非绝对状态。
+        rel_slot_init = self._vehicle_to_slot_frame()
+        self.last_distance = float(np.linalg.norm(rel_slot_init[:2]))
+        self.last_heading_error = float(abs(rel_slot_init[2]))
         return observation, info
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict]:
@@ -688,8 +693,11 @@ class ParkingEnv(gym.Env):
         success = self._check_success(rel_slot, velocity)
 
         reward = 0.0
-        distance_term = -self.reward_cfg["distance_scale"] * distance
-        heading_term = -self.reward_cfg["heading_scale"] * heading_error
+        # Progress-based (delta) rewards / 基于进展的“增量奖励”
+        dist_delta = float(self.last_distance - distance)
+        heading_delta = float(self.last_heading_error - heading_error)
+        distance_term = self.reward_cfg["distance_scale"] * dist_delta
+        heading_term = self.reward_cfg["heading_scale"] * heading_delta
         velocity_term = -self.reward_cfg["velocity_penalty"] * velocity
         smoothness_term = -self.reward_cfg["smoothness"] * (steering_rate ** 2)
         step_term = -self.reward_cfg["step_cost"]
@@ -704,6 +712,10 @@ class ParkingEnv(gym.Env):
         reward += step_term
         reward += collision_term
         reward += success_term
+
+        # Update memory for next step / 更新记忆，供下一步计算增量
+        self.last_distance = float(distance)
+        self.last_heading_error = float(heading_error)
 
         info = {
             "distance_to_slot": distance,
