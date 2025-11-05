@@ -89,6 +89,13 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
   python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048
   ```
 
+- Recurrent PPO training (uses LSTM memory + BPTT):
+
+  ```bash
+  python -m parking_project_submission.ppo_recurrent --total-steps 200000 \
+    --rollout-len 2048 --chunk-len 256 --epochs 4
+  ```
+
 - Evaluate a saved checkpoint (uses policy mean, deterministic):
 
   ```bash
@@ -226,6 +233,7 @@ parking_project_submission/
 │   ├── assist_model_tuner.py  # Qt/Matplotlib assist tuner (optional)
 │   └── generate_training_config.py # Randomized scene generator
 ├── agent_learning.py          # Minimal PPO trainer (stateless T=1)
+├── ppo_recurrent.py           # Recurrent PPO trainer (LSTM + BPTT)
 └── neural_network_demo.py     # NN demo (forward/sample/backward/ONNX)
 
 scripts/
@@ -249,6 +257,7 @@ Key files (focus this week):
 - `parking_project_submission/neural_network_demo.py`: Forward/sample/backward demo; flags `--seq-len`, `--export-onnx`.
 - `parking_project_submission/gym_demo.py`: Random/manual; `--summary` (manual one-line), `--per-step` (random per-step logs).
 - `parking_project_submission/parking_env/env.py`: Environment core (rays, dynamics, rewards, rendering overlays).
+- `parking_project_submission/ppo_recurrent.py`: Recurrent PPO trainer (LSTM + BPTT).
 
 ### Gym Demo Module
 
@@ -350,12 +359,14 @@ Tips: using a fixed small sequence length (e.g., `--seq-len 1`) reduces dynamic-
 
 ### Agent Learning Module
 
-- **Location:** `parking_project_submission/agent_learning.py`
-- **Current status:** Minimal PPO training loop implemented (stateless T=1). Next: recurrent PPO with sequence buffers, GAE masks, and truncated BPTT.
+- **Location:** `parking_project_submission/agent_learning.py` (minimal PPO) and `parking_project_submission/ppo_recurrent.py` (recurrent PPO)
+- **Current status:** Minimal PPO (stateless T=1) and Recurrent PPO (uses LSTM with BPTT) are available.
 
 Usage (training and evaluation)
 - Train on CPU (stateless PPO):
   - `python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048`
+- Train on CPU (recurrent PPO with memory + BPTT):
+  - `python -m parking_project_submission.ppo_recurrent --total-steps 200000 --rollout-len 2048 --chunk-len 256 --epochs 4`
 - Evaluate a checkpoint deterministically (policy mean):
   - `python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_minimal.pt --eval-episodes 5`
 - Visualize the trained policy in the Gym demo (renders a driving episode):
@@ -457,6 +468,13 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
 
   ```bash
   python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048
+  ```
+
+- 时序版 PPO 训练（使用 LSTM 记忆 + BPTT）：
+
+  ```bash
+  python -m parking_project_submission.ppo_recurrent --total-steps 200000 \
+    --rollout-len 2048 --chunk-len 256 --epochs 4
   ```
 
 - 评测已保存的模型（用策略均值，确定性）：
@@ -593,6 +611,7 @@ parking_project_submission/
 │   ├── assist_model_tuner.py  # 助力调参 GUI（可选）
 │   └── generate_training_config.py # 随机场景生成器
 ├── agent_learning.py          # 最小 PPO 训练器（T=1，忽略记忆）
+├── ppo_recurrent.py           # 时序 PPO 训练器（LSTM + BPTT）
 └── neural_network_demo.py     # 神经网络示例（前向/采样/反传/ONNX）
 
 scripts/
@@ -616,6 +635,7 @@ environment.yml                # 可选的 conda/mamba 包装
 - `parking_project_submission/neural_network_demo.py`：前向/采样/反传演示；支持 `--seq-len`、`--export-onnx`。
 - `parking_project_submission/gym_demo.py`：随机/手动演示；`--summary`（手动仅摘要）、`--per-step`（随机逐步日志）。
 - `parking_project_submission/parking_env/env.py`：环境核心（激光射线、动力学、奖励、渲染叠层）。
+- `parking_project_submission/ppo_recurrent.py`：时序 PPO 训练器（LSTM + BPTT）。
 
 ### Gym 模块
 
@@ -717,13 +737,14 @@ python -m parking_project_submission.neural_network_demo --export-onnx artifacts
 
 ### Agent Learning 模块
 
-- **文件：** `parking_project_submission/agent_learning.py`
-- **当前状态：** 已实现最小 PPO 训练循环（T=1，忽略 LSTM 记忆，CPU）。
-- **下一步：** 升级为“时序版” PPO（带序列缓存、GAE mask、truncated BPTT），完善日志/评测与 README 说明。
+- **文件：** `parking_project_submission/agent_learning.py`（最小版 PPO）与 `parking_project_submission/ppo_recurrent.py`（时序版 PPO）
+- **当前状态：** 已提供最小版（T=1）与时序版（携带 LSTM 记忆 + BPTT）两种训练器。
 
 使用方式（训练/评测/可视化）
 - 训练（CPU，最小版）：
   - `python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048`
+- 训练（CPU，时序版，带记忆 + BPTT）：
+  - `python -m parking_project_submission.ppo_recurrent --total-steps 200000 --rollout-len 2048 --chunk-len 256 --epochs 4`
 - 评测（确定性，均值动作）：
   - `python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_minimal.pt --eval-episodes 5`
 - 在 Gym 演示器中可视化（策略模式）：
