@@ -83,28 +83,27 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
 
 #### Learning Agent Quick Start (this week’s focus)
 
-- Recurrent PPO training (uses LSTM memory + BPTT):
+- Train (recurrent PPO; small run for a quick check):
 
   ```bash
-  python -m parking_project_submission.agent_learning --total-steps 200000 \
-    --rollout-len 2048 --chunk-len 256 --epochs 4 \
-    [--config parking_project_submission/configs/train_quick.json] \
-    [--checkpoint artifacts/ppo_agent.pt]
+  python -m parking_project_submission.agent_learning --total-steps 20000 --rollout-len 1024 --chunk-len 128 --epochs 2 --save-path artifacts/ppo_agent.pt
   ```
 
-- Evaluate a saved checkpoint (uses policy mean, deterministic):
+- Evaluate (deterministic policy mean):
 
   ```bash
   python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_agent.pt --eval-episodes 5
   ```
 
-- Visualize the trained policy (policy mode in the Gym demo):
+- Visualize in Gym (policy mode):
 
   ```bash
-  parking-gym-demo --mode policy --episodes 1 --max-steps 400 \
-    --checkpoint artifacts/ppo_agent.pt
-  
-  # extras
+  parking-gym-demo --mode policy --checkpoint artifacts/ppo_agent.pt
+  ```
+
+- Extras:
+
+  ```bash
   parking-gym-demo --mode policy --stochastic --checkpoint artifacts/ppo_agent.pt
   parking-gym-demo --mode policy --checkpoint artifacts/ppo_agent.pt --record artifacts/rollout.mp4
   ```
@@ -364,14 +363,34 @@ Tips: using a fixed small sequence length (e.g., `--seq-len 1`) reduces dynamic-
 - **Current status:** Recurrent PPO trainer using LSTM memory with BPTT.
 
 Usage (training and evaluation)
-- Train on CPU (recurrent PPO with memory + BPTT):
-  - `python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048 --chunk-len 256 --epochs 4`
-- Evaluate a checkpoint deterministically (policy mean):
+- Train on CPU (typical run):
+  - `python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048 --chunk-len 256 --epochs 4 --save-path artifacts/ppo_agent.pt`
+- Continue training from a checkpoint:
+  - `python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048 --chunk-len 256 --epochs 4 --checkpoint artifacts/ppo_agent.pt --save-path artifacts/ppo_agent.pt`
+- Use a specific map config during training or eval:
+  - add `--config parking_project_submission/configs/train_quick.json`
+- Evaluate deterministically (policy mean):
   - `python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_agent.pt --eval-episodes 5`
-- Visualize the trained policy in the Gym demo (renders a driving episode):
+- Visualize in the Gym demo:
   - Deterministic: `parking-gym-demo --mode policy --checkpoint artifacts/ppo_agent.pt`
   - Stochastic: `parking-gym-demo --mode policy --stochastic --checkpoint artifacts/ppo_agent.pt`
   - Record to mp4 (requires `pip install imageio imageio-ffmpeg`): `parking-gym-demo --mode policy --checkpoint artifacts/ppo_agent.pt --record artifacts/rollout.mp4`
+
+CLI arguments (key ones)
+- `--total-steps`: total env interaction steps to collect for training
+- `--rollout-len`: steps per PPO update (one rollout length T)
+- `--chunk-len`: BPTT sequence length used inside updates (must be <= T)
+- `--epochs`: PPO epochs per update
+- `--lr`: Adam learning rate (default 3e-4)
+- `--gamma`: discount factor (default 0.99)
+- `--gae-lambda`: GAE parameter lambda (default 0.95)
+- `--clip-range`: PPO clip epsilon (default 0.2)
+- `--vf-coef`, `--ent-coef`: value/entropy loss weights (defaults 0.5/0.01)
+- `--max-grad-norm`: gradient clipping norm (default 0.5)
+- `--config`: optional JSON overrides for the environment
+- `--save-path`: where to write checkpoints (default `artifacts/ppo_agent.pt`)
+- `--checkpoint`: resume training or evaluate from this file; supports rich checkpoints saved by this script
+- `--eval`, `--eval-episodes`: evaluation-only mode and number of episodes
 
 Notes
 - The trainer currently uses the environment’s default config to keep things simple. A future update will wire `--config` for training to match the Gym demo configuration pipeline.
@@ -462,16 +481,13 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
 
 #### Learning Agent 快速上手（本周重点）
 
-- 时序版 PPO 训练（使用 LSTM 记忆 + BPTT）：
+- 训练（时序版 PPO；快速检查用的小规模）：
 
   ```bash
-  python -m parking_project_submission.agent_learning --total-steps 200000 \
-    --rollout-len 2048 --chunk-len 256 --epochs 4 \
-    [--config parking_project_submission/configs/train_quick.json] \
-    [--checkpoint artifacts/ppo_agent.pt]
+  python -m parking_project_submission.agent_learning --total-steps 20000 --rollout-len 1024 --chunk-len 128 --epochs 2 --save-path artifacts/ppo_agent.pt
   ```
 
-- 评测已保存的模型（用策略均值，确定性）：
+- 评测（用策略均值，确定性）：
 
   ```bash
   python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_agent.pt --eval-episodes 5
@@ -480,10 +496,12 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
 - 在 Gym 演示器中可视化策略（policy 模式）：
 
   ```bash
-  parking-gym-demo --mode policy --episodes 1 --max-steps 400 \
-    --checkpoint artifacts/ppo_agent.pt
+  parking-gym-demo --mode policy --checkpoint artifacts/ppo_agent.pt
+  ```
 
-  # 进阶：随机采样与视频录制（需安装 imageio 与 imageio-ffmpeg）
+- 进阶：
+
+  ```bash
   parking-gym-demo --mode policy --stochastic --checkpoint artifacts/ppo_agent.pt
   parking-gym-demo --mode policy --checkpoint artifacts/ppo_agent.pt --record artifacts/rollout.mp4
   ```
@@ -740,8 +758,12 @@ python -m parking_project_submission.neural_network_demo --export-onnx artifacts
 - **当前状态：** 已实现时序版 PPO 训练器（携带 LSTM 记忆 + BPTT）。
 
 使用方式（训练/评测/可视化）
-- 训练（CPU，时序版，带记忆 + BPTT）：
-  - `python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048 --chunk-len 256 --epochs 4`
+- 常规模型训练：
+  - `python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048 --chunk-len 256 --epochs 4 --save-path artifacts/ppo_agent.pt`
+- 断点续训：
+  - `python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048 --chunk-len 256 --epochs 4 --checkpoint artifacts/ppo_agent.pt --save-path artifacts/ppo_agent.pt`
+- 指定训练/评测地图：
+  - 加 `--config parking_project_submission/configs/train_quick.json`
 - 评测（确定性，均值动作）：
   - `python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_agent.pt --eval-episodes 5`
 - 在 Gym 演示器中可视化（策略模式）：
@@ -749,8 +771,20 @@ python -m parking_project_submission.neural_network_demo --export-onnx artifacts
   - 随机采样：`parking-gym-demo --mode policy --stochastic --checkpoint artifacts/ppo_agent.pt`
   - 录制 mp4（需 `pip install imageio imageio-ffmpeg`）：`parking-gym-demo --mode policy --checkpoint artifacts/ppo_agent.pt --record artifacts/rollout.mp4`
 
-说明
-- 最小训练器为简化演示，当前使用环境默认配置；后续会接入 `--config` 以与 Gym 演示的配置生成保持一致。
-- 策略模式默认使用均值动作；如需更有随机性的表现，增加 `--stochastic` 即可。
+命令行参数（关键项）
+- `--total-steps`：训练期间与环境交互的总步数
+- `--rollout-len`：每次 PPO 更新前收集的步数 T
+- `--chunk-len`：BPTT 的序列块长度（需 ≤ T）
+- `--epochs`：每次更新的优化轮数
+- `--lr`：学习率（默认 3e-4）
+- `--gamma`：折扣因子（默认 0.99）
+- `--gae-lambda`：GAE 的 λ（默认 0.95）
+- `--clip-range`：PPO 的裁剪 ε（默认 0.2）
+- `--vf-coef`、`--ent-coef`：价值/熵损失权重（默认 0.5 / 0.01）
+- `--max-grad-norm`：梯度裁剪阈值（默认 0.5）
+- `--config`：可选 JSON 环境覆盖（地图）
+- `--save-path`：保存模型路径（默认 `artifacts/ppo_agent.pt`）
+- `--checkpoint`：用于续训或评测的权重；兼容本脚本保存的“富 checkpoint”
+- `--eval`、`--eval-episodes`：仅评测模式与评测回合数
 
 祝调参顺利，泊车顺滑！ 🚗

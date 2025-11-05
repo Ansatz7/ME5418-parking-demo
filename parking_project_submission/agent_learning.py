@@ -322,7 +322,11 @@ def evaluate(args: argparse.Namespace) -> None:
     env = ParkingEnv(config=env_cfg)
     act_dim = env.action_space.shape[0]
     model = RecurrentActorCriticLidar(base_dim=11, action_dim=act_dim)
-    model.load_state_dict(torch.load(str(ckpt), map_location="cpu"))
+    payload = torch.load(str(ckpt), map_location="cpu")
+    if isinstance(payload, dict) and "model_state" in payload:
+        model.load_state_dict(payload["model_state"])  # rich checkpoint
+    else:
+        model.load_state_dict(payload)  # raw state_dict
     model.eval()
 
     returns = []
