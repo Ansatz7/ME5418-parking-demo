@@ -95,6 +95,19 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
   python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_minimal.pt --eval-episodes 5
   ```
 
+- Visualize the trained policy (policy mode in the Gym demo):
+
+  ```bash
+  parking-gym-demo --mode policy --episodes 1 --max-steps 400 \
+    --checkpoint artifacts/ppo_minimal.pt
+  
+  # extras
+  parking-gym-demo --mode policy --stochastic --checkpoint artifacts/ppo_minimal.pt
+  parking-gym-demo --mode policy --checkpoint artifacts/ppo_minimal.pt --record artifacts/rollout.mp4
+  ```
+
+See details: [Agent Learning Module](#agent-learning-module)
+
 #### Neural Network Quick Check
 
 - For full details (architecture, export and visualization), see:
@@ -143,6 +156,8 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
   ```bash
   parking-gym-demo --mode manual --episodes 1 --max-steps 400 --summary
   ```
+
+- Note: to run a trained policy, see Learning Agent Quick Start above.
 
 - Generate randomized config and visualize:
 
@@ -199,7 +214,7 @@ This performs:
 ```
 parking_project_submission/
 ├── configs/                    # Default + sample configs (bilingual notes)
-├── gym_demo.py                 # CLI entry (random/manual, --summary/--per-step)
+├── gym_demo.py                 # CLI entry (random/manual/policy, --summary/--per-step/--record)
 ├── modules/
 │   ├── __init__.py
 │   ├── utils.py               # JSON helpers
@@ -337,6 +352,20 @@ Tips: using a fixed small sequence length (e.g., `--seq-len 1`) reduces dynamic-
 
 - **Location:** `parking_project_submission/agent_learning.py`
 - **Current status:** Minimal PPO training loop implemented (stateless T=1). Next: recurrent PPO with sequence buffers, GAE masks, and truncated BPTT.
+
+Usage (training and evaluation)
+- Train on CPU (stateless PPO):
+  - `python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048`
+- Evaluate a checkpoint deterministically (policy mean):
+  - `python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_minimal.pt --eval-episodes 5`
+- Visualize the trained policy in the Gym demo (renders a driving episode):
+  - Deterministic: `parking-gym-demo --mode policy --checkpoint artifacts/ppo_minimal.pt`
+  - Stochastic: `parking-gym-demo --mode policy --stochastic --checkpoint artifacts/ppo_minimal.pt`
+  - Record to mp4 (requires `pip install imageio imageio-ffmpeg`): `parking-gym-demo --mode policy --checkpoint artifacts/ppo_minimal.pt --record artifacts/rollout.mp4`
+
+Notes
+- This minimal trainer uses the environment’s default config to keep things simple. A future update will wire `--config` for training to match the Gym demo configuration pipeline.
+- Policy mode currently uses mean action by default; add `--stochastic` for sampling.
 - **Roadmap:** Next iteration will replace the stub with the actual training routine, tests, and logging hooks. Documentation will be updated alongside that release.
 
 ---
@@ -436,6 +465,19 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
   python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_minimal.pt --eval-episodes 5
   ```
 
+- 在 Gym 演示器中可视化策略（policy 模式）：
+
+  ```bash
+  parking-gym-demo --mode policy --episodes 1 --max-steps 400 \
+    --checkpoint artifacts/ppo_minimal.pt
+
+  # 进阶：随机采样与视频录制（需安装 imageio 与 imageio-ffmpeg）
+  parking-gym-demo --mode policy --stochastic --checkpoint artifacts/ppo_minimal.pt
+  parking-gym-demo --mode policy --checkpoint artifacts/ppo_minimal.pt --record artifacts/rollout.mp4
+  ```
+
+详见： [Agent Learning 模块](#agent-learning-模块)
+
 #### 神经网络快速验证
 
 - 需要更完整的设计、导出与可视化说明，请查看：
@@ -484,6 +526,8 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
   ```bash
   parking-gym-demo --mode manual --episodes 1 --max-steps 400 --summary
   ```
+
+- 注：如需运行已训练策略，请参考上面的 “Learning Agent 快速上手”。
 
 - 随机可视化：
 
@@ -537,7 +581,7 @@ bash run_submission.sh
 ```
 parking_project_submission/
 ├── configs/                    # 默认/示例配置（含双语注释）
-├── gym_demo.py                 # 命令行入口（随机/手动，支持 --summary/--per-step）
+├── gym_demo.py                 # 命令行入口（随机/手动/策略，支持 --summary/--per-step/--record）
 ├── modules/
 │   ├── __init__.py
 │   ├── utils.py               # JSON 读写工具
@@ -676,5 +720,19 @@ python -m parking_project_submission.neural_network_demo --export-onnx artifacts
 - **文件：** `parking_project_submission/agent_learning.py`
 - **当前状态：** 已实现最小 PPO 训练循环（T=1，忽略 LSTM 记忆，CPU）。
 - **下一步：** 升级为“时序版” PPO（带序列缓存、GAE mask、truncated BPTT），完善日志/评测与 README 说明。
+
+使用方式（训练/评测/可视化）
+- 训练（CPU，最小版）：
+  - `python -m parking_project_submission.agent_learning --total-steps 200000 --rollout-len 2048`
+- 评测（确定性，均值动作）：
+  - `python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_minimal.pt --eval-episodes 5`
+- 在 Gym 演示器中可视化（策略模式）：
+  - 均值动作：`parking-gym-demo --mode policy --checkpoint artifacts/ppo_minimal.pt`
+  - 随机采样：`parking-gym-demo --mode policy --stochastic --checkpoint artifacts/ppo_minimal.pt`
+  - 录制 mp4（需 `pip install imageio imageio-ffmpeg`）：`parking-gym-demo --mode policy --checkpoint artifacts/ppo_minimal.pt --record artifacts/rollout.mp4`
+
+说明
+- 最小训练器为简化演示，当前使用环境默认配置；后续会接入 `--config` 以与 Gym 演示的配置生成保持一致。
+- 策略模式默认使用均值动作；如需更有随机性的表现，增加 `--stochastic` 即可。
 
 祝调参顺利，泊车顺滑！ 🚗

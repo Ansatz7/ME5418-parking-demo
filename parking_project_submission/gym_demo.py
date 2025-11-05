@@ -11,9 +11,9 @@ from parking_project_submission.modules import DemoOptions, run_demo
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Parking environment demo runner (manual/random modes)."
+        description="Parking environment demo runner (manual/random/policy)."
     )
-    parser.add_argument("--mode", choices=["random", "manual"], default="manual")
+    parser.add_argument("--mode", choices=["random", "manual", "policy"], default="manual")
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--max-steps", type=int, default=4000)
     parser.add_argument(
@@ -47,6 +47,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Random mode: print per-step logs in addition to the final episode summary.",
     )
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        help="Policy mode: path to model checkpoint (defaults to artifacts/ppo_minimal.pt)",
+    )
+    parser.add_argument(
+        "--stochastic",
+        action="store_true",
+        help="Policy mode: use stochastic sampling instead of deterministic mean.",
+    )
+    parser.add_argument(
+        "--record",
+        type=Path,
+        help="Policy mode: save a video to this path (requires imageio)",
+    )
     return parser.parse_args(argv)
 
 
@@ -62,6 +77,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         verbose=not args.quiet,
         summary=args.summary,
         per_step=args.per_step,
+        policy_checkpoint=args.checkpoint,
+        stochastic=args.stochastic,
+        record_path=args.record,
     )
     run_demo(options)
 

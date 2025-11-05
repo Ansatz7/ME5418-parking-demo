@@ -19,6 +19,8 @@ from typing import Any, Dict, Optional
 import numpy as np
 
 from parking_project_submission.parking_env import DEFAULT_CONFIG, ParkingEnv
+from .networks import RecurrentActorCriticLidar
+import torch
 
 from .utils import read_json
 
@@ -36,6 +38,9 @@ class DemoOptions:
     verbose: bool = True
     summary: bool = False  # print one-line episode summary (manual mode)
     per_step: bool = False  # print per-step logs (random mode)
+    policy_checkpoint: Optional[Path] = None  # path for policy mode
+    stochastic: bool = False  # policy mode: sample() if True else mean
+    record_path: Optional[Path] = None  # policy mode: save video to this path
 
 
 def build_base_config() -> Dict[str, Any]:
@@ -212,5 +217,95 @@ def run_demo(options: DemoOptions) -> None:
 
     if options.mode == "manual":
         run_manual_demo(options)
+    elif options.mode == "policy":
+        run_policy_demo(options)
     else:
         run_random_demo(options)
+
+
+def run_policy_demo(options: DemoOptions) -> None:
+    """Run a deterministic policy rollout using a saved checkpoint.
+
+    Loads `RecurrentActorCriticLidar` and uses the mean action at each step.
+    与随机/手动模式一致，支持渲染与逐步/摘要日志。
+    """
+
+    ckpt = options.policy_checkpoint
+    if ckpt is None:
+        ckpt = Path("artifacts/ppo_minimal.pt")
+
+    env = ParkingEnv(config=resolve_config(options.config_path))
+    try:
+        obs, info = env.reset()
+        if options.visualize:
+            env.render()
+
+        act_dim = env.action_space.shape[0]
+        model = RecurrentActorCriticLidar(base_dim=11, action_dim=act_dim)
+        model.load_state_dict(torch.load(str(ckpt), map_location="cpu"))
+        model.eval()
+
+        # Optional video writer / 可选视频写入
+        writer = None
+        if options.record_path is not None:
+            try:
+                import imageio
+                options.record_path.parent.mkdir(parents=True, exist_ok=True)
+                fps = max(1, int(round(1.0 / float(env.dt))))
+                writer = imageio.get_writer(str(options.record_path), fps=fps)
+                print(f"[Policy] Recording to {options.record_path} at {fps} FPS")
+            except Exception as exc:  # pragma: no cover - optional dependency
+                print(f"Failed to init video writer: {exc}. Proceeding without recording.")
+                writer = None
+
+        for episode in range(options.episodes):
+            if episode > 0:
+                obs, info = env.reset()
+                if options.visualize:
+                    env.render()
+            total_reward = 0.0
+            for step in range(options.max_steps):
+                with torch.no_grad():
+                    out = model.forward_from_flat_obs(torch.tensor(obs, dtype=torch.float32).unsqueeze(0))
+                    if options.stochastic:
+                        action = out.action_dist.sample()[0, -1].numpy()
+                    else:
+                        action = out.action_dist.mean[0, -1].numpy()
+                obs, reward, terminated, truncated, info = env.step(action)
+                total_reward += reward
+                if options.visualize:
+                    env.render()
+                    if options.sleep_scale > 0.0:
+                        time.sleep(env.dt * options.sleep_scale)
+                # Grab frame if recording / 若录制则抓取画面帧
+                if writer is not None and env.fig is not None:
+                    try:
+                        env.fig.canvas.draw()
+                        w, h = env.fig.canvas.get_width_height()
+                        frame = np.frombuffer(env.fig.canvas.tostring_rgb(), dtype=np.uint8).reshape(h, w, 3)
+                        writer.append_data(frame)
+                    except Exception:
+                        pass
+                if options.per_step and options.verbose:
+                    print(
+                        f"[Policy] Ep {episode + 1} Step {step + 1} "
+                        f"Reward {reward:.3f} Term {info['terminal_reason']} "
+                        f"Dist {info['distance_to_slot']:.2f} "
+                        f"Head {np.degrees(info['heading_error']):.1f} deg",
+                        flush=True,
+                    )
+                if terminated or truncated:
+                    break
+            if options.verbose:
+                print(
+                    f"[Policy] Episode {episode + 1} finished in {step + 1} steps "
+                    f"total reward {total_reward:.2f} termination {info['terminal_reason']}",
+                    flush=True,
+                )
+    finally:
+        try:
+            if 'writer' in locals() and writer is not None:
+                writer.close()
+        except Exception:
+            pass
+        env.close()
