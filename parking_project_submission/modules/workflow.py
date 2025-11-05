@@ -287,8 +287,10 @@ def run_policy_demo(options: DemoOptions) -> None:
                 if writer is not None and env.fig is not None:
                     try:
                         env.fig.canvas.draw()
-                        w, h = env.fig.canvas.get_width_height()
-                        frame = np.frombuffer(env.fig.canvas.tostring_rgb(), dtype=np.uint8).reshape(h, w, 3)
+                        w_px, h_px = env.fig.canvas.get_width_height()
+                        frame = np.frombuffer(
+                            env.fig.canvas.tostring_rgb(), dtype=np.uint8
+                        ).reshape(h_px, w_px, 3)
                         writer.append_data(frame)
                     except Exception:
                         pass
