@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Sequence, Tuple
+from typing import Sequence, Tuple, Dict
 
 import numpy as np
 import torch
 from torch import optim
+from torch.utils.tensorboard import SummaryWriter  # <--- 新增
 
 from parking_project_submission.parking_env import ParkingEnv
 from parking_project_submission.modules.workflow import resolve_config
@@ -34,6 +35,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     # General / 通用
     p.add_argument("--seed", type=int, default=42, help="Random seed for env/model")
     p.add_argument("--config", type=Path, help="Optional JSON env override file")
+    p.add_argument("--log-dir", type=Path, default=Path("runs"), help="TensorBoard log directory") # <--- 新增
     # Train / 训练
     p.add_argument("--total-steps", type=int, default=200_000, help="Total env steps")
     p.add_argument("--rollout-len", type=int, default=2048, help="Steps per update (T)")
@@ -110,7 +112,7 @@ def ppo_update_recurrent(
     vf_coef: float,
     ent_coef: float,
     max_grad_norm: float,
-) -> None:
+) -> Dict[str, float]: # <--- 修改：返回 metrics
     """EN: Perform PPO updates by iterating over contiguous chunks.
     ZH: 按时间顺序、连续切片做多轮 PPO 更新，适配 LSTM 的 BPTT。
     """
@@ -127,6 +129,12 @@ def ppo_update_recurrent(
             end = min(T, start + chunk_len)
             yield start, end
             start = end
+
+    # Metrics trackers
+    clip_losses = []
+    value_losses = []
+    entropy_losses = []
+    total_losses = []
 
     for _ in range(epochs):
         # No shuffle! Preserve temporal order / 不打乱，保持时间顺序
@@ -160,6 +168,19 @@ def ppo_update_recurrent(
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
             optimizer.step()
 
+            # Record metrics
+            clip_losses.append(policy_loss.item())
+            value_losses.append(value_loss.item())
+            entropy_losses.append(entropy.item())
+            total_losses.append(loss.item())
+
+    return {
+        "policy_loss": np.mean(clip_losses),
+        "value_loss": np.mean(value_losses),
+        "entropy": np.mean(entropy_losses),
+        "loss": np.mean(total_losses),
+    }
+
 
 def train_recurrent(args: argparse.Namespace) -> None:
     """EN: Single-env recurrent PPO trainer with BPTT.
@@ -168,6 +189,11 @@ def train_recurrent(args: argparse.Namespace) -> None:
 
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+
+    # TensorBoard writer
+    writer = SummaryWriter(log_dir=str(args.log_dir)) # <--- 初始化 Writer
+    print(f"TensorBoard logging to: {args.log_dir}")
+    print(f"Run 'tensorboard --logdir {args.log_dir}' to visualize.")
 
     # Build environment with optional overrides / 按需加载配置覆盖
     env_cfg = resolve_config(args.config)
@@ -270,7 +296,7 @@ def train_recurrent(args: argparse.Namespace) -> None:
         h_seq = torch.stack(h_list, dim=0)
         c_seq = torch.stack(c_list, dim=0)
 
-        ppo_update_recurrent(
+        metrics = ppo_update_recurrent( # <--- 捕获 metrics
             model,
             optimizer,
             np.asarray(obs_buf, dtype=np.float32),
@@ -290,8 +316,19 @@ def train_recurrent(args: argparse.Namespace) -> None:
 
         ep_finished = int(np.sum(done_buf))
         avg_reward = float(np.mean(rew_buf))
+
+        # --- Logging to TensorBoard --- <--- 新增日志记录
+        writer.add_scalar("Rollout/AvgReward", avg_reward, step_count)
+        writer.add_scalar("Rollout/EpisodesFinished", ep_finished, step_count)
+        writer.add_scalar("Train/PolicyLoss", metrics["policy_loss"], step_count)
+        writer.add_scalar("Train/ValueLoss", metrics["value_loss"], step_count)
+        writer.add_scalar("Train/Entropy", metrics["entropy"], step_count)
+        writer.add_scalar("Train/TotalLoss", metrics["loss"], step_count)
+        # ------------------------------
+
         print(
-            f"[PPO-RNN] Update: steps {len(obs_buf)} (episodes {ep_finished}), total {step_count}, avg step reward {avg_reward:.3f}",
+            f"[PPO-RNN] Update: steps {len(obs_buf)} (eps {ep_finished}), total {step_count}, "
+            f"rew {avg_reward:.3f}, loss {metrics['loss']:.3f}, ent {metrics['entropy']:.3f}",
             flush=True,
         )
 
@@ -306,6 +343,7 @@ def train_recurrent(args: argparse.Namespace) -> None:
         str(args.save_path),
     )
     print(f"Saved recurrent checkpoint to {args.save_path}")
+    writer.close() # <--- 关闭 Writer
     env.close()
 
 
