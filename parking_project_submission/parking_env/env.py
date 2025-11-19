@@ -104,7 +104,7 @@ DEFAULT_CONFIG: Dict = {
         "smoothness": 0.05,
         "step_cost": 0.2,
         "velocity_penalty": 0.3,
-        "velocity_tolerance": 0.3,
+        "velocity_tolerance": 2.0,
     },
     "success_thresholds": {
         "position": 0.4,

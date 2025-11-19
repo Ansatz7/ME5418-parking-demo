@@ -148,13 +148,13 @@
       "velocity_tolerance": "速度容忍阈值（米/秒）/ Velocity tolerance (m/s)"
     },
     "distance_scale": 1.5,
-    "heading_scale": 0.5,
+    "heading_scale": 1.5,
     "collision": -120.0,
     "success": 140.0,
     "smoothness": 0.05,
     "step_cost": 0.2,
     "velocity_penalty": 0.3,
-    "velocity_tolerance": 0.1
+    "velocity_tolerance": 2.0
   },
   "success_thresholds": {
     "__notes": {
