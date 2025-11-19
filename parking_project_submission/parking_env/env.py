@@ -104,6 +104,7 @@ DEFAULT_CONFIG: Dict = {
         "smoothness": 0.05,
         "step_cost": 0.2,
         "velocity_penalty": 0.3,
+        "velocity_tolerance": 0.3,
     },
     "success_thresholds": {
         "position": 0.4,
@@ -693,12 +694,24 @@ class ParkingEnv(gym.Env):
         success = self._check_success(rel_slot, velocity)
 
         reward = 0.0
-        # Progress-based (delta) rewards / 基于进展的“增量奖励”
-        dist_delta = float(self.last_distance - distance)
-        heading_delta = float(self.last_heading_error - heading_error)
+
+        # 1. 增量奖励（Delta Rewards）：进步就给正分
+        dist_delta = self.last_distance - distance
         distance_term = self.reward_cfg["distance_scale"] * dist_delta
+
+        heading_delta = self.last_heading_error - heading_error
         heading_term = self.reward_cfg["heading_scale"] * heading_delta
-        velocity_term = -self.reward_cfg["velocity_penalty"] * velocity
+
+        # 2. 速度容忍（Velocity Tolerance）：低速微调不扣分
+        v_tol = float(self.reward_cfg.get("velocity_tolerance", 0.0))
+        punishable_velocity = max(0.0, velocity - v_tol)
+        velocity_term = -self.reward_cfg["velocity_penalty"] * punishable_velocity
+
+        # 3. 更新记忆，为下一步做准备
+        self.last_distance = float(distance)
+        self.last_heading_error = float(heading_error)
+
+        # 其余奖励项保持不变
         smoothness_term = -self.reward_cfg["smoothness"] * (steering_rate ** 2)
         step_term = -self.reward_cfg["step_cost"]
 
@@ -712,10 +725,6 @@ class ParkingEnv(gym.Env):
         reward += step_term
         reward += collision_term
         reward += success_term
-
-        # Update memory for next step / 更新记忆，供下一步计算增量
-        self.last_distance = float(distance)
-        self.last_heading_error = float(heading_error)
 
         info = {
             "distance_to_slot": distance,

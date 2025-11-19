@@ -144,7 +144,8 @@
       "success": "成功奖励 / Success bonus",
       "smoothness": "转向平滑惩罚系数 / Steering smoothness penalty",
       "step_cost": "时间步成本 / Step cost",
-      "velocity_penalty": "速度惩罚系数 / Velocity penalty"
+      "velocity_penalty": "速度惩罚系数 / Velocity penalty",
+      "velocity_tolerance": "速度容忍阈值（米/秒）/ Velocity tolerance (m/s)"
     },
     "distance_scale": 1.5,
     "heading_scale": 0.5,
@@ -152,7 +153,8 @@
     "success": 140.0,
     "smoothness": 0.05,
     "step_cost": 0.2,
-    "velocity_penalty": 0.3
+    "velocity_penalty": 0.3,
+    "velocity_tolerance": 0.1
   },
   "success_thresholds": {
     "__notes": {
