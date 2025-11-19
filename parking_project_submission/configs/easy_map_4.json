@@ -52,26 +52,27 @@
     "manual_steering_accel": 10.0
   },
   "spawn_region": [
-    -1.5,
-    1.5,
-    -1.5,
-    1.5
+    -11.0,
+    11.0,
+    -11.0,
+    11.0
   ],
   "parking_slot": {
     "length": 5.5,
     "width": 2.5,
     "offset_x_range": [
-      -2.5,
-      -1.5
+      -5.0,
+      -3.0
     ],
     "offset_y_range": [
       -0.5,
       0.5
     ],
     "orientation_range": [
-      0.0,
-      0.0
-    ]
+      -0.1,
+      0.1
+    ],
+    "relative_placement": true
   },
   "static_obstacles": {
     "count": 1,
@@ -79,18 +80,18 @@
       1.0,
       2.5
     ],
-    "min_distance": 4.0,
-    "seed": 4669
+    "min_distance": 5.0,
+    "seed": null
   },
   "dynamic_obstacles": {
     "count": 1,
-    "radius": 1.15,
+    "radius": 1.0,
     "speed_range": [
-      0.1,
-      0.3
+      0.2,
+      0.5
     ],
-    "behavior": "random_walk",
-    "min_distance": 5.0,
+    "behavior": "goal_driven",
+    "min_distance": 6.0,
     "heading_noise": 15.0
   },
   "reward": {
@@ -109,5 +110,5 @@
     "speed": 0.3,
     "steering": 5.0
   },
-  "rng_seed": 543065
+  "rng_seed": 788220
 }

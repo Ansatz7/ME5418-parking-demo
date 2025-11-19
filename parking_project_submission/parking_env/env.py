@@ -450,23 +450,75 @@ class ParkingEnv(gym.Env):
             "steering_rate": float(steering_rate),
         }
 
+    # def _generate_parking_slot(self) -> None:
+    #     slot_cfg = self.config["parking_slot"]
+    #     offset_x = self.rng.uniform(*slot_cfg["offset_x_range"])
+    #     offset_y = self.rng.uniform(*slot_cfg["offset_y_range"])
+    #     yaw = self.rng.uniform(*slot_cfg["orientation_range"])
+
+    #     center = np.array([offset_x, offset_y], dtype=float)
+    #     base_slot_cfg = DEFAULT_CONFIG["parking_slot"]
+    #     length = float(slot_cfg.get("length", base_slot_cfg["length"]))
+    #     width = float(slot_cfg.get("width", base_slot_cfg["width"]))
+
+    #     self.target_slot = {
+    #         "center": center,
+    #         "yaw": float(yaw),
+    #         "length": length,
+    #         "width": width,
+    #     }
+
     def _generate_parking_slot(self) -> None:
         slot_cfg = self.config["parking_slot"]
+        
+        # 1. 获取相对偏移量 (Local frame)
+        # 在 Easy 模式下，这些 offset 代表相对于车身的距离
         offset_x = self.rng.uniform(*slot_cfg["offset_x_range"])
         offset_y = self.rng.uniform(*slot_cfg["offset_y_range"])
-        yaw = self.rng.uniform(*slot_cfg["orientation_range"])
-
-        center = np.array([offset_x, offset_y], dtype=float)
+        relative_yaw = self.rng.uniform(*slot_cfg["orientation_range"])
+        
         base_slot_cfg = DEFAULT_CONFIG["parking_slot"]
         length = float(slot_cfg.get("length", base_slot_cfg["length"]))
         width = float(slot_cfg.get("width", base_slot_cfg["width"]))
 
-        self.target_slot = {
-            "center": center,
-            "yaw": float(yaw),
-            "length": length,
-            "width": width,
-        }
+        # 2. 检查是否启用“相对生成模式”
+        # 如果配置里指定了 relative_placement=True，则基于车身坐标系生成车位
+        if slot_cfg.get("relative_placement", False):
+            # 获取车的当前绝对位置和朝向
+            car_x = self.vehicle_state["x"]
+            car_y = self.vehicle_state["y"]
+            car_yaw = self.vehicle_state["yaw"]
+            
+            # 坐标变换：从车身坐标系 -> 世界坐标系
+            # Rotate
+            cos_yaw = math.cos(car_yaw)
+            sin_yaw = math.sin(car_yaw)
+            world_offset_x = offset_x * cos_yaw - offset_y * sin_yaw
+            world_offset_y = offset_x * sin_yaw + offset_y * cos_yaw
+            
+            # Translate
+            center_x = car_x + world_offset_x
+            center_y = car_y + world_offset_y
+            
+            # Angle: 车位朝向 = 车头朝向 + 相对偏角
+            final_yaw = self._wrap_angle(car_yaw + relative_yaw)
+            
+            self.target_slot = {
+                "center": np.array([center_x, center_y], dtype=float),
+                "yaw": float(final_yaw),
+                "length": length,
+                "width": width,
+            }
+        else:
+            # 3. 旧逻辑：绝对坐标生成 (适用于 Hard 模式或随机乱序模式)
+            # 这里的 offset 代表相对于地图原点(0,0)的距离
+            center = np.array([offset_x, offset_y], dtype=float)
+            self.target_slot = {
+                "center": center,
+                "yaw": float(relative_yaw), # 这里直接用读出的角度作为绝对角度
+                "length": length,
+                "width": width,
+            }
 
     def _generate_static_obstacles(self) -> None:
         cfg = self.config["static_obstacles"]
