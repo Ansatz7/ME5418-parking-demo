@@ -736,71 +736,148 @@ class ParkingEnv(gym.Env):
 
         return obs
 
+    # def _compute_reward(self) -> Tuple[float, Dict]:
+    #     rel_slot = self._vehicle_to_slot_frame()
+    #     distance = np.linalg.norm(rel_slot[:2])
+    #     heading_error = abs(rel_slot[2])
+    #     velocity = abs(self.vehicle_state["velocity"])
+    #     steering_rate = abs(self.vehicle_state["steering_rate"])
+    #     collision = self._check_collision()
+    #     success = self._check_success(rel_slot, velocity)
+
+    #     reward = 0.0
+
+    #     # 1. 增量奖励（Delta Rewards）：进步就给正分
+    #     dist_delta = self.last_distance - distance
+    #     distance_term = self.reward_cfg["distance_scale"] * dist_delta
+
+    #     heading_delta = self.last_heading_error - heading_error
+    #     heading_term = self.reward_cfg["heading_scale"] * heading_delta
+
+    #     # 2. 速度容忍（Velocity Tolerance）：低速微调不扣分
+    #     v_tol = float(self.reward_cfg.get("velocity_tolerance", 0.0))
+    #     punishable_velocity = max(0.0, velocity - v_tol)
+    #     velocity_term = -self.reward_cfg["velocity_penalty"] * punishable_velocity
+
+    #     # 3. 方向盘角度惩罚（Steering Angle Penalty）：鼓励尽量走直线
+    #     steering_angle = abs(self.vehicle_state["steering_angle"])
+    #     angle_penalty_scale = 1.0  # 可视为超参数，后续如需可放入配置
+    #     angle_term = -angle_penalty_scale * steering_angle
+
+    #     # 4. 更新记忆，为下一步做准备
+    #     self.last_distance = float(distance)
+    #     self.last_heading_error = float(heading_error)
+
+    #     # 其余奖励项保持不变
+    #     smoothness_term = -self.reward_cfg["smoothness"] * (steering_rate ** 2)
+    #     step_term = -self.reward_cfg["step_cost"]
+
+    #     collision_term = self.reward_cfg["collision"] if collision else 0.0
+    #     success_term = self.reward_cfg["success"] if success else 0.0
+
+    #     reward += distance_term
+    #     reward += heading_term
+    #     reward += velocity_term
+    #     reward += angle_term
+    #     reward += smoothness_term
+    #     reward += step_term
+    #     reward += collision_term
+    #     reward += success_term
+
+    #     info = {
+    #         "distance_to_slot": distance,
+    #         "heading_error": heading_error,
+    #         "collision": collision,
+    #         "success": success,
+    #         "reward_terms": {
+    #             "distance": distance_term,
+    #             "heading": heading_term,
+    #             "velocity": velocity_term,
+    #             "angle": angle_term,
+    #             "smoothness": smoothness_term,
+    #             "step": step_term,
+    #             "collision": collision_term,
+    #             "success": success_term,
+    #         },
+    #     }
+    #     return reward, info
+
     def _compute_reward(self) -> Tuple[float, Dict]:
-        rel_slot = self._vehicle_to_slot_frame()
-        distance = np.linalg.norm(rel_slot[:2])
-        heading_error = abs(rel_slot[2])
-        velocity = abs(self.vehicle_state["velocity"])
-        steering_rate = abs(self.vehicle_state["steering_rate"])
-        collision = self._check_collision()
-        success = self._check_success(rel_slot, velocity)
+            rel_slot = self._vehicle_to_slot_frame()
+            distance = np.linalg.norm(rel_slot[:2])
+            heading_error = abs(rel_slot[2])
+            velocity = abs(self.vehicle_state["velocity"])
+            steering_rate = abs(self.vehicle_state["steering_rate"])
+            collision = self._check_collision()
+            success = self._check_success(rel_slot, velocity)
 
-        reward = 0.0
+            reward = 0.0
 
-        # 1. 增量奖励（Delta Rewards）：进步就给正分
-        dist_delta = self.last_distance - distance
-        distance_term = self.reward_cfg["distance_scale"] * dist_delta
+            # ---------------------------------------------------------
+            # 1. 核心驱动力：增量奖励 (Delta Rewards)
+            # ---------------------------------------------------------
+            # 只要比上一秒近了，就给分！(鼓励移动)
+            dist_delta = self.last_distance - distance
+            # 系数稍微加大一点，让它对靠近这件事更敏感
+            distance_term = 2.0 * dist_delta 
 
-        heading_delta = self.last_heading_error - heading_error
-        heading_term = self.reward_cfg["heading_scale"] * heading_delta
+            # 只要比上一秒正了，就给分！(鼓励回正)
+            heading_delta = self.last_heading_error - heading_error
+            heading_term = 1.0 * heading_delta
 
-        # 2. 速度容忍（Velocity Tolerance）：低速微调不扣分
-        v_tol = float(self.reward_cfg.get("velocity_tolerance", 0.0))
-        punishable_velocity = max(0.0, velocity - v_tol)
-        velocity_term = -self.reward_cfg["velocity_penalty"] * punishable_velocity
+            # ---------------------------------------------------------
+            # 2. 关键事件 (Key Events)
+            # ---------------------------------------------------------
+            # 撞车是大忌，必须重罚
+            collision_term = -100.0 if collision else 0.0
+            # 成功是大奖，必须要够大，让它渴望
+            success_term = +140.0 if success else 0.0
 
-        # 3. 方向盘角度惩罚（Steering Angle Penalty）：鼓励尽量走直线
-        steering_angle = abs(self.vehicle_state["steering_angle"])
-        angle_penalty_scale = 1.0  # 可视为超参数，后续如需可放入配置
-        angle_term = -angle_penalty_scale * steering_angle
+            # ---------------------------------------------------------
+            # 3. 生存税 (Step Cost)
+            # ---------------------------------------------------------
+            # 稍微扣一点点，催促它别磨蹭，但不要扣太多导致它不敢动
+            step_term = -0.05
 
-        # 4. 更新记忆，为下一步做准备
-        self.last_distance = float(distance)
-        self.last_heading_error = float(heading_error)
+            # ---------------------------------------------------------
+            # 4. 解除封印 (Removing Handcuffs)
+            # ---------------------------------------------------------
+            # 在学会走直线之前，不要管姿势优不优美！
+            # 全部设为 0.0，让它随便动！
+            
+            velocity_term = 0.0   # 随便开！开多快都不扣分！
+            smoothness_term = 0.0 # 随便打方向！抽搐也不扣分！
+            angle_term = 0.0      # 方向盘打死也不扣分！(先让它学会转弯再说)
 
-        # 其余奖励项保持不变
-        smoothness_term = -self.reward_cfg["smoothness"] * (steering_rate ** 2)
-        step_term = -self.reward_cfg["step_cost"]
+            # ---------------------------------------------------------
+            # 5. 更新记忆 (Update Memory)
+            # ---------------------------------------------------------
+            self.last_distance = float(distance)
+            self.last_heading_error = float(heading_error)
 
-        collision_term = self.reward_cfg["collision"] if collision else 0.0
-        success_term = self.reward_cfg["success"] if success else 0.0
+            # 汇总
+            reward = distance_term + heading_term + \
+                    velocity_term + smoothness_term + angle_term + \
+                    step_term + collision_term + success_term
 
-        reward += distance_term
-        reward += heading_term
-        reward += velocity_term
-        reward += angle_term
-        reward += smoothness_term
-        reward += step_term
-        reward += collision_term
-        reward += success_term
-
-        info = {
-            "distance_to_slot": distance,
-            "heading_error": heading_error,
-            "collision": collision,
-            "success": success,
-            "reward_terms": {
-                "distance": distance_term,
-                "heading": heading_term,
-                "velocity": velocity_term,
-                "angle": angle_term,
-                "smoothness": smoothness_term,
-                "step": step_term,
-                "collision": collision_term,
-                "success": success_term,
-            },
-        }
-        return reward, info
+            # 记录详细信息方便 Debug
+            info = {
+                "distance_to_slot": distance,
+                "heading_error": heading_error,
+                "collision": collision,
+                "success": success,
+                "reward_terms": {
+                    "distance": distance_term,
+                    "heading": heading_term,
+                    "velocity": velocity_term,
+                    "smoothness": smoothness_term,
+                    "angle": angle_term,
+                    "step": step_term,
+                    "collision": collision_term,
+                    "success": success_term,
+                },
+            }
+            return reward, info
 
     def _check_termination(self, info: Dict) -> Tuple[bool, bool, str]:
         if info["collision"]:

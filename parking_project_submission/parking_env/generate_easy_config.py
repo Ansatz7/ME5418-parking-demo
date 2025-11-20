@@ -23,19 +23,20 @@ from parking_project_submission.modules.utils import write_json
 
 def sample_easy_config(seed: Optional[int] = None) -> Dict:
     rng = random.Random(seed)
-    config: Dict = deepcopy(DEFAULT_CONFIG)
+    # 既然是修改地图，我们先基于默认配置来改，方便获取默认的车位尺寸等信息
+    full_config: Dict = deepcopy(DEFAULT_CONFIG)
 
-    config["rng_seed"] = rng.randint(0, 1_000_000)
-    field_size = float(config["field_size"])
+    full_config["rng_seed"] = rng.randint(0, 1_000_000)
+    field_size = float(full_config["field_size"])
 
     # 1. 出生区域：全图随机！ (满足你的要求：不必在中央，角度任意)
     # 我们留一点边距(4m)防止车直接生在墙里
     safe_margin = 4.0
     limit = field_size / 2.0 - safe_margin
-    config["spawn_region"] = [-limit, limit, -limit, limit]
+    full_config["spawn_region"] = [-limit, limit, -limit, limit]
 
     # 2. 车位设置：开启“相对生成模式” (Relative Placement)
-    slot_cfg = config["parking_slot"].copy()
+    slot_cfg = full_config["parking_slot"].copy()
     slot_cfg["relative_placement"] = True  # <--- 关键开关：告诉env.py使用相对坐标
 
     # 相对坐标设定 (相对于车身)：
@@ -46,24 +47,40 @@ def sample_easy_config(seed: Optional[int] = None) -> Dict:
     # Angle: 角度偏差极小 (+/- 5度)，几乎平行
     slot_cfg["orientation_range"] = (-0.1, 0.1)
     
-    config["parking_slot"] = slot_cfg
+    full_config["parking_slot"] = slot_cfg
 
     # 3. 障碍物：有，但很简单
     # 静态：1个，离车至少5米远
-    static_cfg = config["static_obstacles"].copy()
+    static_cfg = full_config["static_obstacles"].copy()
     static_cfg["count"] = 1
     static_cfg["min_distance"] = 5.0
-    config["static_obstacles"] = static_cfg
+    full_config["static_obstacles"] = static_cfg
 
     # 动态：1个，离车至少6米远，龟速
-    dynamic_cfg = config["dynamic_obstacles"].copy()
+    dynamic_cfg = full_config["dynamic_obstacles"].copy()
     dynamic_cfg["count"] = 1
     dynamic_cfg["min_distance"] = 6.0
     dynamic_cfg["speed_range"] = (0.2, 0.5) # 很慢
-    config["dynamic_obstacles"] = dynamic_cfg
+    full_config["dynamic_obstacles"] = dynamic_cfg
 
-    return config
-
+    # ----------------------------------------------------------------
+    # 【关键修改】只保留地图相关的字段
+    # 这样生成的 JSON 就不会包含 reward, vehicle 等动力学/奖励参数
+    # 从而确保这些参数总是直接读取 env.py 里的最新默认值
+    # ----------------------------------------------------------------
+    map_keys = [
+        "rng_seed",
+        "field_size",
+        "spawn_region",
+        "parking_slot",
+        "static_obstacles",
+        "dynamic_obstacles"
+    ]
+    
+    # 只提取上述 key 返回
+    map_only_config = {k: full_config[k] for k in map_keys if k in full_config}
+    
+    return map_only_config
 
 def save_preview(config: Dict, img_path: Path) -> None:
     """Render the generated config to a PNG file (headless)."""
@@ -76,6 +93,8 @@ def save_preview(config: Dict, img_path: Path) -> None:
     plt.pause = lambda *args, **kwargs: None
 
     try:
+        # ParkingEnv 会自动把这个“只有地图信息”的 config 
+        # 与 env.py 里的 DEFAULT_CONFIG 合并，所以这里能正常运行
         env = ParkingEnv(config=config)
         env.reset()
         env.render()
