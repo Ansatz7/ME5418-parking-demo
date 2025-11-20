@@ -2,8 +2,15 @@
 
 Features:
 - Vehicle spawns ANYWHERE in the map with ANY rotation.
-- Parking slot spawns RELATIVE to the vehicle (always close behind).
-- Obstacles are present but sparse and slow.
+- Parking slot spawns RELATIVE to the vehicle.
+- Curriculum Distribution (Corrected):
+    - 5%:  Instant Victory (Inside slot) - 免费午餐
+    - 15%: Front (Close) - 前向 1.0~2.0m
+    - 30%: Behind (Very Close) - 后向 0.5~0.75m
+    - 30%: Behind (Close) - 后向 0.75~1.0m
+    - 20%: Behind (Medium) - 后向 1.0~2.5m
+- Obstacles: Spawn relative to the parking slot (left/right sides) to guide the agent.
+- ONLY exports map-related configs.
 """
 
 from __future__ import annotations
@@ -23,51 +30,85 @@ from parking_project_submission.modules.utils import write_json
 
 def sample_easy_config(seed: Optional[int] = None) -> Dict:
     rng = random.Random(seed)
-    # 既然是修改地图，我们先基于默认配置来改，方便获取默认的车位尺寸等信息
+    # 使用 deepcopy 确保不修改全局配置，且只修改地图相关参数
     full_config: Dict = deepcopy(DEFAULT_CONFIG)
 
     full_config["rng_seed"] = rng.randint(0, 1_000_000)
     field_size = float(full_config["field_size"])
 
-    # 1. 出生区域：全图随机！ (满足你的要求：不必在中央，角度任意)
-    # 我们留一点边距(4m)防止车直接生在墙里
+    # 1. 出生区域：全图随机
+    # 满足“出生点不必在中央”的要求，增加场景多样性
     safe_margin = 4.0
     limit = field_size / 2.0 - safe_margin
     full_config["spawn_region"] = [-limit, limit, -limit, limit]
 
-    # 2. 车位设置：开启“相对生成模式” (Relative Placement)
+    # 2. 车位设置：相对生成模式
     slot_cfg = full_config["parking_slot"].copy()
-    slot_cfg["relative_placement"] = True  # <--- 关键开关：告诉env.py使用相对坐标
+    slot_cfg["relative_placement"] = True 
 
-    # 相对坐标设定 (相对于车身)：
-    # X: 在车后方 3.0 到 5.0 米处 (倒车入库的完美起手式)
-    slot_cfg["offset_x_range"] = (-5.0, -3.0)
-    # Y: 左右偏移很小 (0.5米内)，几乎正对
-    slot_cfg["offset_y_range"] = (-0.5, 0.5)
-    # Angle: 角度偏差极小 (+/- 5度)，几乎平行
+    # --- 概率分布逻辑 (已更正注释以匹配代码) ---
+    prob = rng.random() # 生成 0.0 到 1.0 之间的随机数
+
+    if prob < 0.05:
+        # [5% 概率] 出生即胜利 (Instant Victory)
+        # 放在车身中心 -0.2 ~ 0.2 米处
+        # 作用：让 Critic 快速学会“终点状态”的高价值
+        slot_cfg["offset_x_range"] = (-0.2, 0.2)
+        slot_cfg["offset_y_range"] = (-0.1, 0.1)
+
+    elif prob < 0.20:
+        # [15% 概率] 前方一点点 (Front, Close)
+        # 放在车头前方 1.0 ~ 2.0 米
+        # 作用：学会简单的油门控制
+        slot_cfg["offset_x_range"] = (1.0, 2.0)
+        slot_cfg["offset_y_range"] = (-0.2, 0.2)
+
+    elif prob < 0.50:
+        # [30% 概率] 后方非常近 (Behind, Very Close)
+        # 放在车尾后方 0.5 ~ 0.75 米
+        # 作用：倒车入库的极简入门，几乎只要直退
+        slot_cfg["offset_x_range"] = (-0.75, -0.5)
+        slot_cfg["offset_y_range"] = (-0.2, 0.2)
+
+    elif prob < 0.80:
+        # [30% 概率] 后方稍近 (Behind, Close)
+        # 放在车尾后方 0.75 ~ 1.0 米
+        # 作用：稍微增加一点距离感
+        slot_cfg["offset_x_range"] = (-1.0, -0.75)
+        slot_cfg["offset_y_range"] = (-0.2, 0.2)
+
+    else:
+        # [20% 概率] 后方中等距离 (Behind, Medium)
+        # 放在车尾后方 1.0 ~ 2.5 米
+        # 作用：主力训练区间，距离适中
+        slot_cfg["offset_x_range"] = (-2.5, -1.0)
+        slot_cfg["offset_y_range"] = (-0.2, 0.2)
+
+    # 统一设置：角度偏差极小，降低难度，专注练习距离控制
     slot_cfg["orientation_range"] = (-0.1, 0.1)
     
     full_config["parking_slot"] = slot_cfg
 
-    # 3. 障碍物：有，但很简单
-    # 静态：1个，离车至少5米远
+    # 3. 静态障碍物设置：在车位两侧生成
     static_cfg = full_config["static_obstacles"].copy()
-    static_cfg["count"] = 1
-    static_cfg["min_distance"] = 5.0
+    static_cfg["count"] = 2           # 左右各放一些，形成通道
+    static_cfg["relative_to_slot"] = True  # <--- 新增开关：相对于车位生成
+    static_cfg["side_distance"] = 3.5      # <--- 新增参数：离车位中心的横向距离 (比如左右3.5米处)
+    static_cfg["x_random"] = 2.0           # <--- 新增参数：前后位置的随机范围
+    
+    # size_range 也可以稍微调整，不需要太大
+    static_cfg["size_range"] = (0.5, 1.0)
+    
     full_config["static_obstacles"] = static_cfg
 
-    # 动态：1个，离车至少6米远，龟速
+    # 动态障碍物：保留一个龟速的，离远点
     dynamic_cfg = full_config["dynamic_obstacles"].copy()
     dynamic_cfg["count"] = 1
-    dynamic_cfg["min_distance"] = 6.0
-    dynamic_cfg["speed_range"] = (0.2, 0.5) # 很慢
+    dynamic_cfg["min_distance"] = 6.0 
+    dynamic_cfg["speed_range"] = (0.1, 0.2)
     full_config["dynamic_obstacles"] = dynamic_cfg
 
-    # ----------------------------------------------------------------
-    # 【关键修改】只保留地图相关的字段
-    # 这样生成的 JSON 就不会包含 reward, vehicle 等动力学/奖励参数
-    # 从而确保这些参数总是直接读取 env.py 里的最新默认值
-    # ----------------------------------------------------------------
+    # 只保留地图相关的字段
     map_keys = [
         "rng_seed",
         "field_size",
@@ -77,10 +118,10 @@ def sample_easy_config(seed: Optional[int] = None) -> Dict:
         "dynamic_obstacles"
     ]
     
-    # 只提取上述 key 返回
     map_only_config = {k: full_config[k] for k in map_keys if k in full_config}
     
     return map_only_config
+
 
 def save_preview(config: Dict, img_path: Path) -> None:
     """Render the generated config to a PNG file (headless)."""
@@ -93,8 +134,6 @@ def save_preview(config: Dict, img_path: Path) -> None:
     plt.pause = lambda *args, **kwargs: None
 
     try:
-        # ParkingEnv 会自动把这个“只有地图信息”的 config 
-        # 与 env.py 里的 DEFAULT_CONFIG 合并，所以这里能正常运行
         env = ParkingEnv(config=config)
         env.reset()
         env.render()

@@ -19,7 +19,7 @@ LR=3e-4
 
 # 熵系数 (默认 0.01)。控制探索欲望。
 # 如果 agent 太早“躺平”不愿动，调大它 (0.05); 如果 agent 乱动不收敛，调小它 (0.001)
-ENT_COEF=0.005
+ENT_COEF=0.01
 
 # 每次更新的 Epochs (默认 4)。每批数据反复学习几次。
 EPOCHS=4
@@ -46,20 +46,23 @@ echo "   - 熵系数:   $ENT_COEF"
 echo "======================================================="
 
 
-# ==============================================================================
-# 2. 地图生成阶段 (Map Generation)
-# ==============================================================================
-echo ""
-echo "[Phase 1] 正在生成 $NUM_STAGES 张不同的 Easy 地图..."
+# # ==============================================================================
+# # 2. 地图生成阶段 (Map Generation)
+# # ==============================================================================
+# echo ""
+# echo "[Phase 1] 正在生成 $NUM_STAGES 张不同的 Easy 地图..."
 
-for ((i=1; i<=NUM_STAGES; i++))
-do
-    # 不加 --seed 让它随机生成，保证每张图的出生点都不一样
-    # 自动生成文件名: easy_map_1.json, easy_map_2.json ...
-    python -m parking_project_submission.parking_env.generate_easy_config \
-        --out "$CONFIG_DIR/easy_map_${i}.json"
-    echo "  -> 生成完毕: easy_map_${i}.json (含预览图)"
-done
+# for ((i=1; i<=NUM_STAGES; i++))
+# do
+#     # 不加 --seed 让它随机生成，保证每张图的出生点都不一样
+#     # 自动生成文件名: easy_map_1.json, easy_map_2.json ...
+#     python -m parking_project_submission.parking_env.generate_easy_config \
+#         --out "$CONFIG_DIR/easy_map_${i}.json"
+#     echo "  -> 生成完毕: easy_map_${i}.json (含预览图)"
+#     # python -m parking_project_submission.parking_env.generate_easy_config \
+#     #     --out "$CONFIG_DIR/easy_map_test_${i}.json"
+#     # echo "  -> 生成完毕: easy_map_test_${i}.json (含预览图)"
+# done
 
 
 # ==============================================================================
@@ -136,8 +139,8 @@ parking-gym-demo \
     --mode policy \
     --checkpoint "$FINAL_MODEL" \
     --config "$TEST_MAP" \
-    --no-visualize \
-    --record "$VIDEO_PATH"
+    --record "$VIDEO_PATH"\
+    # --no-visualize 
 
 echo ""
 echo "✅ 验收完成！请查看录像文件: $VIDEO_PATH"

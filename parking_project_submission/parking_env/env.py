@@ -520,36 +520,102 @@ class ParkingEnv(gym.Env):
                 "width": width,
             }
 
+    # def _generate_static_obstacles(self) -> None:
+    #     cfg = self.config["static_obstacles"]
+    #     self.static_obstacles = []
+    #     count = cfg["count"]
+    #     size_min, size_max = cfg["size_range"]
+    #     min_dist = cfg["min_distance"]
+
+    #     if cfg.get("seed") is not None:
+    #         local_rng = np.random.default_rng(cfg["seed"])
+    #     else:
+    #         local_rng = self.rng
+
+    #     attempts = 0
+    #     while len(self.static_obstacles) < count and attempts < 200:
+    #         attempts += 1
+    #         width = float(local_rng.uniform(size_min, size_max))
+    #         height = float(local_rng.uniform(size_min, size_max))
+    #         x = float(local_rng.uniform(-self.half_field + width, self.half_field - width))
+    #         y = float(local_rng.uniform(-self.half_field + height, self.half_field - height))
+
+    #         center = np.array([x, y], dtype=float)
+    #         if self._is_far_from_vehicle(center, min_dist) and self._is_far_from_slot(
+    #             center, min_dist
+    #         ):
+    #             self.static_obstacles.append(
+    #                 {
+    #                     "center": center,
+    #                     "size": (width, height),
+    #                 }
+    #             )
+
     def _generate_static_obstacles(self) -> None:
-        cfg = self.config["static_obstacles"]
-        self.static_obstacles = []
-        count = cfg["count"]
-        size_min, size_max = cfg["size_range"]
-        min_dist = cfg["min_distance"]
+            cfg = self.config["static_obstacles"]
+            self.static_obstacles = []
+            count = cfg["count"]
+            size_min, size_max = cfg["size_range"]
+            min_dist = cfg["min_distance"]
 
-        if cfg.get("seed") is not None:
-            local_rng = np.random.default_rng(cfg["seed"])
-        else:
-            local_rng = self.rng
+            # 检查是否开启了“相对于车位生成”模式 (For Easy Curriculum)
+            relative_to_slot = cfg.get("relative_to_slot", False)
 
-        attempts = 0
-        while len(self.static_obstacles) < count and attempts < 200:
-            attempts += 1
-            width = float(local_rng.uniform(size_min, size_max))
-            height = float(local_rng.uniform(size_min, size_max))
-            x = float(local_rng.uniform(-self.half_field + width, self.half_field - width))
-            y = float(local_rng.uniform(-self.half_field + height, self.half_field - height))
+            if cfg.get("seed") is not None:
+                local_rng = np.random.default_rng(cfg["seed"])
+            else:
+                local_rng = self.rng
 
-            center = np.array([x, y], dtype=float)
-            if self._is_far_from_vehicle(center, min_dist) and self._is_far_from_slot(
-                center, min_dist
-            ):
-                self.static_obstacles.append(
-                    {
-                        "center": center,
-                        "size": (width, height),
-                    }
-                )
+            attempts = 0
+            while len(self.static_obstacles) < count and attempts < 200:
+                attempts += 1
+                width = float(local_rng.uniform(size_min, size_max))
+                height = float(local_rng.uniform(size_min, size_max))
+
+                if relative_to_slot and self.target_slot:
+                    # --- 相对生成逻辑 ---
+                    # 在车位左右两侧生成，形成“通道”
+                    # 偶数个放左边，奇数个放右边 (或者随机)
+                    side_sign = 1 if len(self.static_obstacles) % 2 == 0 else -1
+                    
+                    # 获取配置的侧向距离，默认为 3.5米
+                    side_dist = cfg.get("side_distance", 3.5)
+                    # 获取配置的前后随机范围，默认为 2.0米
+                    x_random = cfg.get("x_random", 2.0)
+
+                    # 计算相对于车位中心的坐标
+                    # y轴偏移: 放在两侧
+                    rel_y = side_sign * side_dist + local_rng.uniform(-0.5, 0.5)
+                    # x轴偏移: 在车位前后浮动
+                    rel_x = local_rng.uniform(-x_random, x_random)
+
+                    # 转换到世界坐标系
+                    slot_center = self.target_slot["center"]
+                    slot_yaw = self.target_slot["yaw"]
+                    cos_yaw = math.cos(slot_yaw)
+                    sin_yaw = math.sin(slot_yaw)
+
+                    # 旋转 + 平移
+                    world_x = slot_center[0] + (rel_x * cos_yaw - rel_y * sin_yaw)
+                    world_y = slot_center[1] + (rel_x * sin_yaw + rel_y * cos_yaw)
+                    
+                    center = np.array([world_x, world_y], dtype=float)
+                else:
+                    # --- 原有逻辑：全图随机 ---
+                    x = float(local_rng.uniform(-self.half_field + width, self.half_field - width))
+                    y = float(local_rng.uniform(-self.half_field + height, self.half_field - height))
+                    center = np.array([x, y], dtype=float)
+
+                # 碰撞检查 (通用)
+                if self._is_far_from_vehicle(center, min_dist) and self._is_far_from_slot(
+                    center, min_dist
+                ):
+                    self.static_obstacles.append(
+                        {
+                            "center": center,
+                            "size": (width, height),
+                        }
+                    )
 
     def _generate_dynamic_obstacles(self) -> None:
         cfg = self.config["dynamic_obstacles"]
