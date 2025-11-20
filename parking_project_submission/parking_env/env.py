@@ -98,13 +98,13 @@ DEFAULT_CONFIG: Dict = {
     },
     "reward": {
         "distance_scale": 1.5,
-        "heading_scale": 0.5,
+        "heading_scale": 1.5,
         "collision": -120.0,
         "success": 140.0,
-        "smoothness": 0.05,
+        "smoothness": 0.00,
         "step_cost": 0.2,
         "velocity_penalty": 0.3,
-        "velocity_tolerance": 2.0,
+        "velocity_tolerance": 1.0,
     },
     "success_thresholds": {
         "position": 0.4,
@@ -759,7 +759,12 @@ class ParkingEnv(gym.Env):
         punishable_velocity = max(0.0, velocity - v_tol)
         velocity_term = -self.reward_cfg["velocity_penalty"] * punishable_velocity
 
-        # 3. 更新记忆，为下一步做准备
+        # 3. 方向盘角度惩罚（Steering Angle Penalty）：鼓励尽量走直线
+        steering_angle = abs(self.vehicle_state["steering_angle"])
+        angle_penalty_scale = 1.0  # 可视为超参数，后续如需可放入配置
+        angle_term = -angle_penalty_scale * steering_angle
+
+        # 4. 更新记忆，为下一步做准备
         self.last_distance = float(distance)
         self.last_heading_error = float(heading_error)
 
@@ -773,6 +778,7 @@ class ParkingEnv(gym.Env):
         reward += distance_term
         reward += heading_term
         reward += velocity_term
+        reward += angle_term
         reward += smoothness_term
         reward += step_term
         reward += collision_term
@@ -787,6 +793,7 @@ class ParkingEnv(gym.Env):
                 "distance": distance_term,
                 "heading": heading_term,
                 "velocity": velocity_term,
+                "angle": angle_term,
                 "smoothness": smoothness_term,
                 "step": step_term,
                 "collision": collision_term,
