@@ -7,15 +7,15 @@ set -e  # 如果任何一步出错，脚本立刻停止
 
 # --- 课程设置 ---
 # 生成几张地图来轮流训练？(建议至少 3-5 张以保证泛化性)
-NUM_STAGES=4
+NUM_STAGES=1
 
 # 每一关(每张地图)训练多少步？
 # 步数越多，基础越牢；总步数 = NUM_STAGES * STEPS_PER_STAGE
-STEPS_PER_STAGE=200000
+STEPS_PER_STAGE=500000
 
 # --- PPO 超参数设置 (Hyperparameters) ---
 # 学习率 (默认 3e-4)。如果发现 loss 震荡严重可调小 (如 1e-4)
-LR=3e-4
+LR=1e-4
 
 # 熵系数 (默认 0.01)。控制探索欲望。
 # 如果 agent 太早“躺平”不愿动，调大它 (0.05); 如果 agent 乱动不收敛，调小它 (0.001)
@@ -111,7 +111,7 @@ do
 done
 
 # 将最后一个模型复制为 final
-FINAL_MODEL="$ARTIFACT_DIR/model_easy_final.pt"
+FINAL_MODEL="$ARTIFACT_DIR/model_easy_4map.pt"
 cp "$PREV_MODEL" "$FINAL_MODEL"
 
 echo ""
@@ -126,7 +126,7 @@ echo "[Phase 3] 正在进行可视化验收 (录制视频)..."
 
 # 使用最后一张训练地图进行测试
 TEST_MAP="$CONFIG_DIR/easy_map_${NUM_STAGES}.json"
-VIDEO_PATH="$VIDEO_DIR/demo_easy_final.mp4"
+VIDEO_PATH="$VIDEO_DIR/demo_easy_4map.mp4"
 
 echo "   - 测试模型: $FINAL_MODEL"
 echo "   - 测试地图: $TEST_MAP"

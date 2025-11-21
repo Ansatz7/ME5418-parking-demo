@@ -19,6 +19,48 @@ Note: Compared to earlier submissions, this repository has been refactored to ma
 
 The default workflow uses `pip install -e .` so users can get the demo running in minutes. An optional `environment.yml` is provided for those who prefer Conda/Mamba.
 
+#### Trained Agents Preview (Easy/Medium)
+
+After installation, you can immediately watch the current trained agents:
+
+- Easy level (two sample maps):
+
+  ```bash
+  # Easy map 1 (no video recording)
+  parking-gym-demo --mode policy \
+    --checkpoint artifacts/model_easy_final.pt \
+    --config parking_project_submission/configs/easy_map_1.json
+  ```
+
+  ```bash
+  # Easy map 3, with video recording
+  parking-gym-demo --mode policy \
+    --checkpoint artifacts/model_easy_final_1.pt \
+    --config parking_project_submission/configs/easy_map_3.json \
+    --record artifacts/videos/test_easy_4s.mp4
+  ```
+
+- Medium level (two sample maps):
+
+  ```bash
+  # Medium default course
+  parking-gym-demo --mode policy \
+    --checkpoint artifacts/ppo_medium_course.pt \
+    --config parking_project_submission/configs/train_medium.json
+  ```
+
+  ```bash
+  # Custom medium map
+  parking-gym-demo --mode policy \
+    --checkpoint artifacts/ppo_medium_course.pt \
+    --config parking_project_submission/configs/my_custom_medium3.json
+  ```
+
+These checkpoints are not fully-general policies for all maps, but represent
+the current progress of curriculum training (easy → medium scenes). Due to
+time constraints and task difficulty, this submission focuses on these
+intermediate agents rather than a single fully-general policy.
+
 #### Environment Setup
 
 Before you begin
@@ -109,6 +151,13 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
   ```
 
 See details: [Agent Learning Module](#agent-learning-module)
+
+TensorBoard (optional, for training curves):
+
+```bash
+pip install tensorboard
+tensorboard --logdir runs
+```
 
 #### Neural Network Quick Check
 
@@ -243,6 +292,9 @@ scripts/
 ├── setup_env.sh               # Create env + pip install -e .
 └── clean.sh                   # Clean caches + artifacts/*.onnx
 
+artifacts/                      # Saved models, videos, ONNX exports
+runs/                           # TensorBoard logs (see Agent Learning Quick Start)
+
 requirements.txt               # Core Python deps (CPU-only)
 setup.py                       # Packaging (editable install)
 environment.yml                # Optional conda/mamba wrapper
@@ -371,6 +423,13 @@ Usage (training and evaluation)
   - add `--config parking_project_submission/configs/train_quick.json`
 - Evaluate deterministically (policy mean):
   - `python -m parking_project_submission.agent_learning --eval --checkpoint artifacts/ppo_agent.pt --eval-episodes 5`
+
+TensorBoard (training curves and metrics)
+- Install once:
+  - `pip install tensorboard`
+- Launch the dashboard (default log dir is `runs`):
+  - `tensorboard --logdir runs`
+  - Then open the printed URL (usually http://localhost:6006) in a browser.
 - Visualize in the Gym demo:
   - Deterministic: `parking-gym-demo --mode policy --checkpoint artifacts/ppo_agent.pt`
   - Stochastic: `parking-gym-demo --mode policy --stochastic --checkpoint artifacts/ppo_agent.pt`
@@ -507,6 +566,43 @@ parking-gym-demo --mode random --episodes 1 --max-steps 10 --no-visualize
   ```
 
 详见： [Agent Learning 模块](#agent-learning-模块)
+
+#### 已训练 Agent 快速预览（Easy/Medium）
+
+在完成环境安装后，可以直接观看当前已训练好的 Agent（注意：这些模型仍是课程学习过程中的阶段性成果，而非“适用于所有地图”的最终 Agent；由于时间与任务难度限制，本实验尚未完成对统一终极 Agent 的训练，但在 Easy/Medium 课程上已取得阶段性效果）：
+
+- 简单难度（两个示例地图）：
+
+  ```bash
+  # 简单地图 1（不录制视频）
+  parking-gym-demo --mode policy \
+    --checkpoint artifacts/model_easy_final.pt \
+    --config parking_project_submission/configs/easy_map_1.json
+  ```
+
+  ```bash
+  # 简单地图 3，并保存可视化视频
+  parking-gym-demo --mode policy \
+    --checkpoint artifacts/model_easy_final_1.pt \
+    --config parking_project_submission/configs/easy_map_3.json \
+    --record artifacts/videos/test_easy_4s.mp4
+  ```
+
+- 中等难度（两个示例地图）：
+
+  ```bash
+  # 中等难度默认课程地图
+  parking-gym-demo --mode policy \
+    --checkpoint artifacts/ppo_medium_course.pt \
+    --config parking_project_submission/configs/train_medium.json
+  ```
+
+  ```bash
+  # 自定义中等难度地图
+  parking-gym-demo --mode policy \
+    --checkpoint artifacts/ppo_medium_course.pt \
+    --config parking_project_submission/configs/my_custom_medium3.json
+  ```
 
 #### 神经网络快速验证
 

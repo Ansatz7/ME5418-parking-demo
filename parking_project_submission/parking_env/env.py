@@ -97,8 +97,8 @@ DEFAULT_CONFIG: Dict = {
         "heading_noise": 15.0,
     },
     "reward": {
-        "distance_scale": 1.5,
-        "heading_scale": 1.5,
+        "distance_scale": 10.0,
+        "heading_scale": 3.0,
         "collision": -120.0,
         "success": 140.0,
         "smoothness": 0.00,
@@ -109,8 +109,8 @@ DEFAULT_CONFIG: Dict = {
     "success_thresholds": {
         "position": 0.4,
         "orientation": 6.0,
-        "speed": 0.3,
-        "steering": 5.0,
+        "speed": 5.0,
+        "steering": 60.0,
     },
     "rng_seed": 42,
 }
@@ -155,8 +155,8 @@ class ParkingEnv(gym.Env):
             dtype=np.float32,
         )
         self.action_space = spaces.Box(
-            low=np.array([-3.0, -1.5], dtype=np.float32),
-            high=np.array([2.0, 1.5], dtype=np.float32),
+            low=np.array([-3.0, -1.0], dtype=np.float32),
+            high=np.array([2.0, 1.0], dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -265,10 +265,11 @@ class ParkingEnv(gym.Env):
         self.last_action = np.zeros(2, dtype=float)
         self.last_reward = 0.0
         self.last_reward_terms = {}
-        # Initialize delta-reward memory so step() can compute progress-based rewards
-        # 初始化“增量奖励”的记忆（上一时刻的距离与朝向误差），用于奖励进展而非绝对状态。
+        # Initialize delta-reward memory for separated longitudinal/lateral components
+        # 初始化“分离轴”增量奖励的记忆：纵向距离 / 横向距离 / 朝向误差。
         rel_slot_init = self._vehicle_to_slot_frame()
-        self.last_distance = float(np.linalg.norm(rel_slot_init[:2]))
+        self.last_long_dist = float(abs(rel_slot_init[0]))  # longitudinal (x)
+        self.last_lat_dist = float(abs(rel_slot_init[1]))   # lateral (y)
         self.last_heading_error = float(abs(rel_slot_init[2]))
         return observation, info
 
@@ -397,16 +398,21 @@ class ParkingEnv(gym.Env):
             )
 
             if self.last_reward_terms:
+                rt = self.last_reward_terms
                 reward_lines = [
                     "Reward components:",
                     f"  total: {self.last_reward:+.2f}",
-                    f"  distance: {self.last_reward_terms.get('distance', 0.0):+.2f}",
-                    f"  heading: {self.last_reward_terms.get('heading', 0.0):+.2f}",
-                    f"  velocity: {self.last_reward_terms.get('velocity', 0.0):+.2f}",
-                    f"  smoothness: {self.last_reward_terms.get('smoothness', 0.0):+.2f}",
-                    f"  step: {self.last_reward_terms.get('step', 0.0):+.2f}",
-                    f"  collision: {self.last_reward_terms.get('collision', 0.0):+.2f}",
-                    f"  success: {self.last_reward_terms.get('success', 0.0):+.2f}",
+                    f"  dist_total: {rt.get('distance', 0.0):+.2f}",
+                    f"    dist_long: {rt.get('distance_long', 0.0):+.2f}",
+                    f"    dist_lat:  {rt.get('distance_lat', 0.0):+.2f}",
+                    f"  heading: {rt.get('heading', 0.0):+.2f}",
+                    f"  abs_dist: {rt.get('abs_dist', 0.0):+.2f}",
+                    f"  angle: {rt.get('angle', 0.0):+.2f}",
+                    f"  velocity: {rt.get('velocity', 0.0):+.2f}",
+                    f"  smoothness: {rt.get('smoothness', 0.0):+.2f}",
+                    f"  step: {rt.get('step', 0.0):+.2f}",
+                    f"  collision: {rt.get('collision', 0.0):+.2f}",
+                    f"  success: {rt.get('success', 0.0):+.2f}",
                 ]
             else:
                 reward_lines = [
@@ -432,41 +438,41 @@ class ParkingEnv(gym.Env):
             self.ax = None
 
     # Vehicle and environment setup helpers ---------------------------------
+    # def _spawn_vehicle(self) -> None:
+    #     xmin, xmax, ymin, ymax = self.config["spawn_region"]
+    #     x = self.rng.uniform(xmin, xmax)
+    #     y = self.rng.uniform(ymin, ymax)
+    #     yaw = self.rng.uniform(-math.pi, math.pi)
+    #     velocity = 0.0
+    #     steering_angle = 0.0
+    #     steering_rate = 0.0
+
     def _spawn_vehicle(self) -> None:
-        xmin, xmax, ymin, ymax = self.config["spawn_region"]
-        x = self.rng.uniform(xmin, xmax)
-        y = self.rng.uniform(ymin, ymax)
-        yaw = self.rng.uniform(-math.pi, math.pi)
-        velocity = 0.0
-        steering_angle = 0.0
-        steering_rate = 0.0
+            xmin, xmax, ymin, ymax = self.config["spawn_region"]
+            x = self.rng.uniform(xmin, xmax)
+            y = self.rng.uniform(ymin, ymax)
+            
+            # --- 修改：优先读取配置中的固定车头朝向 ---
+            # 如果配置里有 "spawn_yaw" 字段，就用它；否则保持随机。
+            if "spawn_yaw" in self.config:
+                yaw = float(self.config["spawn_yaw"])
+            else:
+                yaw = self.rng.uniform(-math.pi, math.pi)
+            # ---------------------------------------
+            
+            velocity = 0.0
+            steering_angle = 0.0
+            steering_rate = 0.0
 
-        self.vehicle_state = {
-            "x": float(x),
-            "y": float(y),
-            "yaw": float(yaw),
-            "velocity": float(velocity),
-            "steering_angle": float(steering_angle),
-            "steering_rate": float(steering_rate),
-        }
+            self.vehicle_state = {
+                "x": float(x),
+                "y": float(y),
+                "yaw": float(yaw),
+                "velocity": float(velocity),
+                "steering_angle": float(steering_angle),
+                "steering_rate": float(steering_rate),
+            }
 
-    # def _generate_parking_slot(self) -> None:
-    #     slot_cfg = self.config["parking_slot"]
-    #     offset_x = self.rng.uniform(*slot_cfg["offset_x_range"])
-    #     offset_y = self.rng.uniform(*slot_cfg["offset_y_range"])
-    #     yaw = self.rng.uniform(*slot_cfg["orientation_range"])
-
-    #     center = np.array([offset_x, offset_y], dtype=float)
-    #     base_slot_cfg = DEFAULT_CONFIG["parking_slot"]
-    #     length = float(slot_cfg.get("length", base_slot_cfg["length"]))
-    #     width = float(slot_cfg.get("width", base_slot_cfg["width"]))
-
-    #     self.target_slot = {
-    #         "center": center,
-    #         "yaw": float(yaw),
-    #         "length": length,
-    #         "width": width,
-    #     }
 
     def _generate_parking_slot(self) -> None:
         slot_cfg = self.config["parking_slot"]
@@ -551,14 +557,204 @@ class ParkingEnv(gym.Env):
     #                 }
     #             )
 
+    # def _generate_static_obstacles(self) -> None:
+    #         cfg = self.config["static_obstacles"]
+    #         self.static_obstacles = []
+    #         count = cfg["count"]
+    #         size_min, size_max = cfg["size_range"]
+    #         min_dist = cfg["min_distance"]
+
+    #         # 检查是否开启了“相对于车位生成”模式 (For Easy Curriculum)
+    #         relative_to_slot = cfg.get("relative_to_slot", False)
+
+    #         if cfg.get("seed") is not None:
+    #             local_rng = np.random.default_rng(cfg["seed"])
+    #         else:
+    #             local_rng = self.rng
+
+    #         attempts = 0
+    #         while len(self.static_obstacles) < count and attempts < 200:
+    #             attempts += 1
+    #             width = float(local_rng.uniform(size_min, size_max))
+    #             height = float(local_rng.uniform(size_min, size_max))
+
+    #             if relative_to_slot and self.target_slot:
+    #                 # --- 相对生成逻辑 ---
+    #                 # 在车位左右两侧生成，形成“通道”
+    #                 # 偶数个放左边，奇数个放右边 (或者随机)
+    #                 side_sign = 1 if len(self.static_obstacles) % 2 == 0 else -1
+                    
+    #                 # 获取配置的侧向距离，默认为 3.5米
+    #                 side_dist = cfg.get("side_distance", 3.5)
+    #                 # 获取配置的前后随机范围，默认为 2.0米
+    #                 x_random = cfg.get("x_random", 2.0)
+
+    #                 # 计算相对于车位中心的坐标
+    #                 # y轴偏移: 放在两侧
+    #                 rel_y = side_sign * side_dist + local_rng.uniform(-0.5, 0.5)
+    #                 # x轴偏移: 在车位前后浮动
+    #                 rel_x = local_rng.uniform(-x_random, x_random)
+
+    #                 # 转换到世界坐标系
+    #                 slot_center = self.target_slot["center"]
+    #                 slot_yaw = self.target_slot["yaw"]
+    #                 cos_yaw = math.cos(slot_yaw)
+    #                 sin_yaw = math.sin(slot_yaw)
+
+    #                 # 旋转 + 平移
+    #                 world_x = slot_center[0] + (rel_x * cos_yaw - rel_y * sin_yaw)
+    #                 world_y = slot_center[1] + (rel_x * sin_yaw + rel_y * cos_yaw)
+                    
+    #                 center = np.array([world_x, world_y], dtype=float)
+    #             else:
+    #                 # --- 原有逻辑：全图随机 ---
+    #                 x = float(local_rng.uniform(-self.half_field + width, self.half_field - width))
+    #                 y = float(local_rng.uniform(-self.half_field + height, self.half_field - height))
+    #                 center = np.array([x, y], dtype=float)
+
+    #             # 碰撞检查 (通用)
+    #             if self._is_far_from_vehicle(center, min_dist) and self._is_far_from_slot(
+    #                 center, min_dist
+    #             ):
+    #                 self.static_obstacles.append(
+    #                     {
+    #                         "center": center,
+    #                         "size": (width, height),
+    #                     }
+    #                 )
+
+
+    # def _generate_static_obstacles(self) -> None:
+    #         # --- 优先检查是否有手动指定的障碍物 (用于地图设计器) ---
+    #         manual_obs = self.config.get("manual_static_obstacles")
+    #         if manual_obs:
+    #             self.static_obstacles = []
+    #             for obs in manual_obs:
+    #                 self.static_obstacles.append({
+    #                     "center": np.array(obs["center"], dtype=float),
+    #                     "size": tuple(obs["size"])
+    #                 })
+    #             return
+    #         # ---------------------------------------------------
+
+    #         cfg = self.config["static_obstacles"]
+    #         self.static_obstacles = []
+    #         count = cfg["count"]
+    #         size_min, size_max = cfg["size_range"]
+    #         min_dist = cfg["min_distance"]
+
+    #         # 检查是否开启了“相对于车位生成”模式 (For Easy Curriculum)
+    #         relative_to_slot = cfg.get("relative_to_slot", False)
+
+    #         if cfg.get("seed") is not None:
+    #             local_rng = np.random.default_rng(cfg["seed"])
+    #         else:
+    #             local_rng = self.rng
+
+    #         attempts = 0
+    #         while len(self.static_obstacles) < count and attempts < 200:
+    #             attempts += 1
+    #             width = float(local_rng.uniform(size_min, size_max))
+    #             height = float(local_rng.uniform(size_min, size_max))
+
+    #             if relative_to_slot and self.target_slot:
+    #                 # --- 相对生成逻辑 ---
+    #                 # 在车位左右两侧生成，形成“通道”
+    #                 # 偶数个放左边，奇数个放右边 (或者随机)
+    #                 side_sign = 1 if len(self.static_obstacles) % 2 == 0 else -1
+                    
+    #                 # 获取配置的侧向距离，默认为 3.5米
+    #                 side_dist = cfg.get("side_distance", 3.5)
+    #                 # 获取配置的前后随机范围，默认为 2.0米
+    #                 x_random = cfg.get("x_random", 2.0)
+
+    #                 # 计算相对于车位中心的坐标
+    #                 # y轴偏移: 放在两侧
+    #                 rel_y = side_sign * side_dist + local_rng.uniform(-0.5, 0.5)
+    #                 # x轴偏移: 在车位前后浮动
+    #                 rel_x = local_rng.uniform(-x_random, x_random)
+
+    #                 # 转换到世界坐标系
+    #                 slot_center = self.target_slot["center"]
+    #                 slot_yaw = self.target_slot["yaw"]
+    #                 cos_yaw = math.cos(slot_yaw)
+    #                 sin_yaw = math.sin(slot_yaw)
+
+    #                 # 旋转 + 平移
+    #                 world_x = slot_center[0] + (rel_x * cos_yaw - rel_y * sin_yaw)
+    #                 world_y = slot_center[1] + (rel_x * sin_yaw + rel_y * cos_yaw)
+                    
+    #                 center = np.array([world_x, world_y], dtype=float)
+    #             else:
+    #                 # --- 原有逻辑：全图随机 ---
+    #                 x = float(local_rng.uniform(-self.half_field + width, self.half_field - width))
+    #                 y = float(local_rng.uniform(-self.half_field + height, self.half_field - height))
+    #                 center = np.array([x, y], dtype=float)
+
+    #             # 碰撞检查 (通用)
+    #             if self._is_far_from_vehicle(center, min_dist) and self._is_far_from_slot(
+    #                 center, min_dist
+    #             ):
+    #                 self.static_obstacles.append(
+    #                     {
+    #                         "center": center,
+    #                         "size": (width, height),
+    #                     }
+    #                 )
+
+
+    # def _generate_dynamic_obstacles(self) -> None:
+    #     cfg = self.config["dynamic_obstacles"]
+    #     self.dynamic_obstacles = []
+    #     count = cfg["count"]
+    #     radius = cfg["radius"]
+    #     min_dist = cfg["min_distance"]
+
+    #     for _ in range(count):
+    #         for _ in range(100):
+    #             x = float(self.rng.uniform(-self.half_field + radius, self.half_field - radius))
+    #             y = float(self.rng.uniform(-self.half_field + radius, self.half_field - radius))
+    #             center = np.array([x, y], dtype=float)
+    #             if (
+    #                 self._is_far_from_vehicle(center, min_dist)
+    #                 and self._is_far_from_slot(center, min_dist)
+    #             ):
+    #                 break
+    #         else:
+    #             center = np.array([0.0, 0.0], dtype=float)
+
+    #         heading = float(self.rng.uniform(-math.pi, math.pi))
+    #         speed = float(self.rng.uniform(*cfg["speed_range"]))
+    #         obstacle = {
+    #             "pos": center,
+    #             "heading": heading,
+    #             "speed": speed,
+    #             "radius": float(radius),
+    #             "behavior": cfg["behavior"],
+    #             "target": self._sample_random_point(),
+    #         }
+    #         self.dynamic_obstacles.append(obstacle)
+
     def _generate_static_obstacles(self) -> None:
+            # --- 新增：优先读取手动定义的静态障碍物 ---
+            manual_obs = self.config.get("manual_static_obstacles")
+            if manual_obs is not None:
+                self.static_obstacles = []
+                for obs in manual_obs:
+                    self.static_obstacles.append({
+                        "center": np.array(obs["center"], dtype=float),
+                        "size": tuple(obs["size"])
+                    })
+                return
+            # ---------------------------------------
+
             cfg = self.config["static_obstacles"]
             self.static_obstacles = []
             count = cfg["count"]
             size_min, size_max = cfg["size_range"]
             min_dist = cfg["min_distance"]
 
-            # 检查是否开启了“相对于车位生成”模式 (For Easy Curriculum)
+            # 检查是否开启了“相对于车位生成”模式
             relative_to_slot = cfg.get("relative_to_slot", False)
 
             if cfg.get("seed") is not None:
@@ -574,50 +770,46 @@ class ParkingEnv(gym.Env):
 
                 if relative_to_slot and self.target_slot:
                     # --- 相对生成逻辑 ---
-                    # 在车位左右两侧生成，形成“通道”
-                    # 偶数个放左边，奇数个放右边 (或者随机)
                     side_sign = 1 if len(self.static_obstacles) % 2 == 0 else -1
-                    
-                    # 获取配置的侧向距离，默认为 3.5米
                     side_dist = cfg.get("side_distance", 3.5)
-                    # 获取配置的前后随机范围，默认为 2.0米
                     x_random = cfg.get("x_random", 2.0)
 
-                    # 计算相对于车位中心的坐标
-                    # y轴偏移: 放在两侧
                     rel_y = side_sign * side_dist + local_rng.uniform(-0.5, 0.5)
-                    # x轴偏移: 在车位前后浮动
                     rel_x = local_rng.uniform(-x_random, x_random)
 
-                    # 转换到世界坐标系
                     slot_center = self.target_slot["center"]
                     slot_yaw = self.target_slot["yaw"]
                     cos_yaw = math.cos(slot_yaw)
                     sin_yaw = math.sin(slot_yaw)
 
-                    # 旋转 + 平移
                     world_x = slot_center[0] + (rel_x * cos_yaw - rel_y * sin_yaw)
                     world_y = slot_center[1] + (rel_x * sin_yaw + rel_y * cos_yaw)
-                    
                     center = np.array([world_x, world_y], dtype=float)
                 else:
-                    # --- 原有逻辑：全图随机 ---
+                    # --- 全图随机逻辑 ---
                     x = float(local_rng.uniform(-self.half_field + width, self.half_field - width))
                     y = float(local_rng.uniform(-self.half_field + height, self.half_field - height))
                     center = np.array([x, y], dtype=float)
 
-                # 碰撞检查 (通用)
-                if self._is_far_from_vehicle(center, min_dist) and self._is_far_from_slot(
-                    center, min_dist
-                ):
-                    self.static_obstacles.append(
-                        {
-                            "center": center,
-                            "size": (width, height),
-                        }
-                    )
+                if self._is_far_from_vehicle(center, min_dist) and self._is_far_from_slot(center, min_dist):
+                    self.static_obstacles.append({"center": center, "size": (width, height)})
 
     def _generate_dynamic_obstacles(self) -> None:
+        # --- 新增：优先读取手动定义的动态障碍物 ---
+        manual_obs = self.config.get("manual_dynamic_obstacles")
+        if manual_obs is not None:
+            self.dynamic_obstacles = []
+            for obs in manual_obs:
+                # 必须深拷贝并转为 numpy，否则 env reset 时会出错
+                new_obs = copy.deepcopy(obs)
+                new_obs["pos"] = np.array(obs["pos"], dtype=float)
+                # 如果定义了 target (goal_driven)，也转为 numpy
+                if "target" in obs:
+                    new_obs["target"] = np.array(obs["target"], dtype=float)
+                self.dynamic_obstacles.append(new_obs)
+            return
+        # ---------------------------------------
+
         cfg = self.config["dynamic_obstacles"]
         self.dynamic_obstacles = []
         count = cfg["count"]
@@ -629,10 +821,7 @@ class ParkingEnv(gym.Env):
                 x = float(self.rng.uniform(-self.half_field + radius, self.half_field - radius))
                 y = float(self.rng.uniform(-self.half_field + radius, self.half_field - radius))
                 center = np.array([x, y], dtype=float)
-                if (
-                    self._is_far_from_vehicle(center, min_dist)
-                    and self._is_far_from_slot(center, min_dist)
-                ):
+                if (self._is_far_from_vehicle(center, min_dist) and self._is_far_from_slot(center, min_dist)):
                     break
             else:
                 center = np.array([0.0, 0.0], dtype=float)
@@ -648,6 +837,7 @@ class ParkingEnv(gym.Env):
                 "target": self._sample_random_point(),
             }
             self.dynamic_obstacles.append(obstacle)
+
 
     # Update functions -------------------------------------------------------
     # 状态更新函数集，负责车辆、动态障碍等的时间推进。
@@ -869,81 +1059,93 @@ class ParkingEnv(gym.Env):
     #     return reward, info
 
     def _compute_reward(self) -> Tuple[float, Dict]:
-            rel_slot = self._vehicle_to_slot_frame()
-            distance = np.linalg.norm(rel_slot[:2])
-            heading_error = abs(rel_slot[2])
-            velocity = abs(self.vehicle_state["velocity"])
-            steering_rate = abs(self.vehicle_state["steering_rate"])
-            collision = self._check_collision()
-            success = self._check_success(rel_slot, velocity)
+        rel_slot = self._vehicle_to_slot_frame()
+        long_dist = abs(rel_slot[0])  # longitudinal (x)
+        lat_dist = abs(rel_slot[1])   # lateral (y)
+        heading_error = abs(rel_slot[2])
 
-            reward = 0.0
+        velocity = abs(self.vehicle_state["velocity"])
+        steering_rate = abs(self.vehicle_state["steering_rate"])
+        steering_angle = abs(self.vehicle_state["steering_angle"])
 
-            # ---------------------------------------------------------
-            # 1. 核心驱动力：增量奖励 (Delta Rewards)
-            # ---------------------------------------------------------
-            # 只要比上一秒近了，就给分！(鼓励移动)
-            dist_delta = self.last_distance - distance
-            # 系数稍微加大一点，让它对靠近这件事更敏感
-            distance_term = 2.0 * dist_delta 
+        collision = self._check_collision()
+        success = self._check_success(rel_slot, velocity)
 
-            # 只要比上一秒正了，就给分！(鼓励回正)
-            heading_delta = self.last_heading_error - heading_error
-            heading_term = 1.0 * heading_delta
+        # ---------------------------------------------------------
+        # 1. 核心驱动力：分离轴的增量奖励 (Delta Rewards)
+        # ---------------------------------------------------------
+        long_delta = self.last_long_dist - long_dist
+        lat_delta = self.last_lat_dist - lat_dist
+        head_delta = self.last_heading_error - heading_error
 
-            # ---------------------------------------------------------
-            # 2. 关键事件 (Key Events)
-            # ---------------------------------------------------------
-            # 撞车是大忌，必须重罚
-            collision_term = -100.0 if collision else 0.0
-            # 成功是大奖，必须要够大，让它渴望
-            success_term = +140.0 if success else 0.0
+        # 横向优先：优先把车挪到车库中轴线 (Y=0)
+        long_term = 10.0 * long_delta
+        lat_term = 30.0 * lat_delta
+        heading_term = 10.0 * head_delta
 
-            # ---------------------------------------------------------
-            # 3. 生存税 (Step Cost)
-            # ---------------------------------------------------------
-            # 稍微扣一点点，催促它别磨蹭，但不要扣太多导致它不敢动
-            step_term = -0.05
+        # 为了与原有可视化兼容，将 distance_term 定义为两者之和
+        distance_term = long_term + lat_term
 
-            # ---------------------------------------------------------
-            # 4. 解除封印 (Removing Handcuffs)
-            # ---------------------------------------------------------
-            # 在学会走直线之前，不要管姿势优不优美！
-            # 全部设为 0.0，让它随便动！
-            
-            velocity_term = 0.0   # 随便开！开多快都不扣分！
-            smoothness_term = 0.0 # 随便打方向！抽搐也不扣分！
-            angle_term = 0.0      # 方向盘打死也不扣分！(先让它学会转弯再说)
+        # ---------------------------------------------------------
+        # 2. 防止“赖着不走”：绝对距离的小惩罚 (Anti-Loitering)
+        # ---------------------------------------------------------
+        abs_dist_penalty = -0.5 * float(np.linalg.norm(rel_slot[:2]))
 
-            # ---------------------------------------------------------
-            # 5. 更新记忆 (Update Memory)
-            # ---------------------------------------------------------
-            self.last_distance = float(distance)
-            self.last_heading_error = float(heading_error)
+        # ---------------------------------------------------------
+        # 3. 方向盘高压线：角度惩罚 (Angle Penalty)
+        # ---------------------------------------------------------
+        angle_term = -5.0 * steering_angle
 
-            # 汇总
-            reward = distance_term + heading_term + \
-                    velocity_term + smoothness_term + angle_term + \
-                    step_term + collision_term + success_term
+        # ---------------------------------------------------------
+        # 4. 其他项：在基础阶段先不约束速度/平滑度，只保留轻微 step_cost
+        # ---------------------------------------------------------
+        velocity_term = 0.0
+        smoothness_term = 0.0
+        step_term = -self.reward_cfg["step_cost"]
 
-            # 记录详细信息方便 Debug
-            info = {
-                "distance_to_slot": distance,
-                "heading_error": heading_error,
-                "collision": collision,
-                "success": success,
-                "reward_terms": {
-                    "distance": distance_term,
-                    "heading": heading_term,
-                    "velocity": velocity_term,
-                    "smoothness": smoothness_term,
-                    "angle": angle_term,
-                    "step": step_term,
-                    "collision": collision_term,
-                    "success": success_term,
-                },
-            }
-            return reward, info
+        # 关键事件：碰撞与成功奖励
+        collision_term = self.reward_cfg["collision"] if collision else 0.0
+        success_term = self.reward_cfg["success"] if success else 0.0
+
+        # 更新记忆，为下一步计算增量
+        self.last_long_dist = float(long_dist)
+        self.last_lat_dist = float(lat_dist)
+        self.last_heading_error = float(heading_error)
+
+        # 汇总总奖励
+        reward = (
+            distance_term
+            + heading_term
+            + abs_dist_penalty
+            + velocity_term
+            + smoothness_term
+            + angle_term
+            + step_term
+            + collision_term
+            + success_term
+        )
+
+        info = {
+            "distance_to_slot": float(np.linalg.norm(rel_slot[:2])),
+            "heading_error": heading_error,
+            "collision": collision,
+            "success": success,
+            "reward_terms": {
+                "distance": distance_term,
+                "distance_long": long_term,
+                "distance_lat": lat_term,
+                "heading": heading_term,
+                "abs_dist": abs_dist_penalty,
+                "velocity": velocity_term,
+                "smoothness": smoothness_term,
+                "angle": angle_term,
+                "step": step_term,
+                "collision": collision_term,
+                "success": success_term,
+            },
+        }
+        return reward, info
+
 
     def _check_termination(self, info: Dict) -> Tuple[bool, bool, str]:
         if info["collision"]:

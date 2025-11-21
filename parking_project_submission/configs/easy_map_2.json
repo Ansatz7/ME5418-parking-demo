@@ -1,5 +1,5 @@
 {
-  "rng_seed": 448040,
+  "rng_seed": 226410,
   "field_size": 30.0,
   "spawn_region": [
     -11.0,
@@ -11,8 +11,8 @@
     "length": 5.5,
     "width": 2.5,
     "offset_x_range": [
-      -2.5,
-      -1.0
+      1.0,
+      2.0
     ],
     "offset_y_range": [
       -0.2,
@@ -25,16 +25,13 @@
     "relative_placement": true
   },
   "static_obstacles": {
-    "count": 2,
+    "count": 1,
     "size_range": [
-      0.5,
-      1.0
+      1.0,
+      2.5
     ],
-    "min_distance": 2.0,
-    "seed": null,
-    "relative_to_slot": true,
-    "side_distance": 3.5,
-    "x_random": 2.0
+    "min_distance": 3.0,
+    "seed": null
   },
   "dynamic_obstacles": {
     "count": 1,

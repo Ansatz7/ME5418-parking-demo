@@ -1,47 +1,48 @@
 {
-  "rng_seed": 678598,
+  "rng_seed": 42,
   "field_size": 30.0,
   "spawn_region": [
-    -11.0,
-    11.0,
-    -11.0,
-    11.0
+    -0.01,
+    0.01,
+    -0.01,
+    0.01
   ],
   "parking_slot": {
     "length": 5.5,
     "width": 2.5,
     "offset_x_range": [
-      1.0,
-      2.0
+      -4.01,
+      -3.99
     ],
     "offset_y_range": [
-      -0.2,
-      0.2
+      -2.01,
+      -1.99
     ],
     "orientation_range": [
-      -0.1,
-      0.1
+      -0.01,
+      0.01
     ],
     "relative_placement": true
   },
   "static_obstacles": {
-    "count": 1,
+    "count": 0,
     "size_range": [
       1.0,
       2.5
     ],
-    "min_distance": 3.0,
+    "min_distance": 2.0,
     "seed": null
   },
   "dynamic_obstacles": {
     "count": 1,
     "radius": 1.0,
     "speed_range": [
-      0.1,
-      0.2
+      0.2,
+      0.5
     ],
     "behavior": "goal_driven",
-    "min_distance": 6.0,
+    "min_distance": 8.0,
     "heading_noise": 15.0
-  }
+  },
+  "manual_static_obstacles": []
 }
